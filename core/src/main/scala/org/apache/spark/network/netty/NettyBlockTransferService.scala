@@ -58,9 +58,12 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
           Some(new SaslClientBootstrap(transportConf, conf.getAppId, securityManager)))
       }
     }
-    transportContext = new TransportContext(transportConf, rpcHandler)
+    transportContext = new TransportContext(
+      transportConf, rpcHandler, securityManager.createEncryptionHandler())
     clientFactory = transportContext.createClientFactory(bootstrap.toList)
-    server = transportContext.createServer(conf.getInt("spark.blockManager.port", 0))
+
+    val port = conf.getInt("spark.blockManager.port", 0)
+    server = transportContext.createServer(port)
     appId = conf.getAppId
     logInfo("Server created on " + server.getPort)
   }

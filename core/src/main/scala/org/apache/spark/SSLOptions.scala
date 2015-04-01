@@ -20,6 +20,9 @@ package org.apache.spark
 import java.io.File
 
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
+
+import org.apache.spark.network.util.ssl.SSLFactory
+
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
 /**
@@ -30,25 +33,38 @@ import org.eclipse.jetty.util.ssl.SslContextFactory
  * by the protocol, which it can generate the configuration for. Since Akka doesn't support client
  * authentication with SSL, SSLOptions cannot support it either.
  *
- * @param enabled             enables or disables SSL; if it is set to false, the rest of the
- *                            settings are disregarded
- * @param keyStore            a path to the key-store file
- * @param keyStorePassword    a password to access the key-store file
- * @param keyPassword         a password to access the private key in the key-store
- * @param trustStore          a path to the trust-store file
- * @param trustStorePassword  a password to access the trust-store file
- * @param protocol            SSL protocol (remember that SSLv3 was compromised) supported by Java
- * @param enabledAlgorithms   a set of encryption algorithms to use
+ * @param enabled enables or disables SSL;
+ *                if it is set to false, the rest of the settings are disregarded
+ * @param keyStore a path to the key-store file
+ * @param keyStorePassword a password to access the key-store file
+ * @param privateKey a PKCS#8 private key file in PEM format
+ * @param keyPassword a password to access the private key in the key-store
+ * @param certChain an X.509 certificate chain file in PEM format
+ * @param trustStore a path to the trust-store file
+ * @param trustStorePassword a password to access the trust-store file
+ * @param trustStoreReloadingEnabled enables or disables using a trust-store that that
+ * reloads its configuration when the trust-store file on disk changes
+ * @param trustStoreReloadInterval the interval, in milliseconds,
+ * when the trust-store will reload its configuration
+ * @param openSslEnabled enables or disables using an OpenSSL implementation
+ * (if available on host system), requires certChain and keyFile arguments
+ * @param protocol SSL protocol (remember that SSLv3 was compromised) supported by Java
+ * @param enabledAlgorithms a set of encryption algorithms to use
  */
 private[spark] case class SSLOptions(
-    enabled: Boolean = false,
-    keyStore: Option[File] = None,
-    keyStorePassword: Option[String] = None,
-    keyPassword: Option[String] = None,
-    trustStore: Option[File] = None,
-    trustStorePassword: Option[String] = None,
-    protocol: Option[String] = None,
-    enabledAlgorithms: Set[String] = Set.empty) {
+  enabled: Boolean = false,
+  keyStore: Option[File] = None,
+  keyStorePassword: Option[String] = None,
+  privateKey: Option[File] = None,
+  keyPassword: Option[String] = None,
+  certChain: Option[File] = None,
+  trustStore: Option[File] = None,
+  trustStorePassword: Option[String] = None,
+  trustStoreReloadingEnabled: Boolean = false,
+  trustStoreReloadInterval: Int = 10000,
+  openSslEnabled: Boolean = false,
+  protocol: Option[String] = None,
+  enabledAlgorithms: Set[String] = Set.empty) {
 
   /**
    * Creates a Jetty SSL context factory according to the SSL settings represented by this object.
@@ -56,7 +72,6 @@ private[spark] case class SSLOptions(
   def createJettySslContextFactory(): Option[SslContextFactory] = {
     if (enabled) {
       val sslContextFactory = new SslContextFactory()
-
       keyStore.foreach(file => sslContextFactory.setKeyStorePath(file.getAbsolutePath))
       trustStore.foreach(file => sslContextFactory.setTrustStore(file.getAbsolutePath))
       keyStorePassword.foreach(sslContextFactory.setKeyStorePassword)
@@ -64,8 +79,31 @@ private[spark] case class SSLOptions(
       keyPassword.foreach(sslContextFactory.setKeyManagerPassword)
       protocol.foreach(sslContextFactory.setProtocol)
       sslContextFactory.setIncludeCipherSuites(enabledAlgorithms.toSeq: _*)
-
       Some(sslContextFactory)
+    } else {
+      None
+    }
+  }
+
+  /**
+   *
+   * @return
+   */
+  def createSSLFactory: Option[SSLFactory] = {
+    if (enabled) {
+      Some(new SSLFactory.Builder()
+        .requestedProtocol(protocol.getOrElse(null))
+        .requestedCiphers(enabledAlgorithms.toArray)
+        .keyStore(keyStore.getOrElse(null), keyStorePassword.getOrElse(null))
+        .privateKey(privateKey.getOrElse(null))
+        .keyPassword(keyPassword.getOrElse(null))
+        .certChain(certChain.getOrElse(null))
+        .trustStore(
+          trustStore.getOrElse(null),
+          trustStorePassword.getOrElse(null),
+          trustStoreReloadingEnabled,
+          trustStoreReloadInterval)
+        .build())
     } else {
       None
     }
@@ -104,9 +142,11 @@ private[spark] case class SSLOptions(
 
   /** Returns a string representation of this SSLOptions with all the passwords masked. */
   override def toString: String = s"SSLOptions{enabled=$enabled, " +
-      s"keyStore=$keyStore, keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
-      s"trustStore=$trustStore, trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
-      s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}"
+    s"keyStore=$keyStore, keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
+    s"keyFile=$privateKey, certChain=$certChain, trustStore=$trustStore, " +
+    s"trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
+    s"openSslEnabled=$openSslEnabled, trustStoreReloadingEnabled=$trustStoreReloadingEnabled, " +
+    s"protocol=$protocol, enabledAlgorithms=$enabledAlgorithms}"
 
 }
 
@@ -116,12 +156,21 @@ private[spark] object SSLOptions extends Logging {
     *
     * The following settings are allowed:
     * $ - `[ns].enabled` - `true` or `false`, to enable or disable SSL respectively
-    * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
+    * $ - `[ns].keyStore` - a path to the key-store file; can be relative
+    * to the current directory
     * $ - `[ns].keyStorePassword` - a password to the key-store file
+    * $ - `[ns].privateKey` - a PKCS#8 private key file in PEM format
     * $ - `[ns].keyPassword` - a password to the private key
-    * $ - `[ns].trustStore` - a path to the trust-store file; can be relative to the current
-    *                         directory
+    * $ - `[ns].certChain` - an X.509 certificate chain file in PEM format
+    * $ - `[ns].trustStore` - a path to the trust-store file; can be relative
+    * to the current directory
     * $ - `[ns].trustStorePassword` - a password to the trust-store file
+    * $ - `[ns].trustStoreReloadingEnabled` - enables or disables using a trust-store
+    * that that reloads its configuration when the trust-store file on disk changes
+    * $ - `[ns].trustStoreReloadInterval` - the interval, in milliseconds, the
+    * trust-store will reload its configuration
+    * $ - `[ns].openSslEnabled` - enables or disables using an OpenSSL implementation
+    * (if available on host system), requires certChain and keyFile arguments
     * $ - `[ns].protocol` - a protocol name supported by a particular Java version
     * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
     *
@@ -141,38 +190,54 @@ private[spark] object SSLOptions extends Logging {
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
 
     val keyStore = conf.getOption(s"$ns.keyStore").map(new File(_))
-        .orElse(defaults.flatMap(_.keyStore))
+      .orElse(defaults.flatMap(_.keyStore))
 
     val keyStorePassword = conf.getOption(s"$ns.keyStorePassword")
-        .orElse(defaults.flatMap(_.keyStorePassword))
+      .orElse(defaults.flatMap(_.keyStorePassword))
+
+    val privateKey = conf.getOption(s"$ns.privateKey").map(new File(_))
+      .orElse(defaults.flatMap(_.privateKey))
 
     val keyPassword = conf.getOption(s"$ns.keyPassword")
-        .orElse(defaults.flatMap(_.keyPassword))
+      .orElse(defaults.flatMap(_.keyPassword))
+
+    val certChain = conf.getOption(s"$ns.certChain").map(new File(_))
+      .orElse(defaults.flatMap(_.certChain))
 
     val trustStore = conf.getOption(s"$ns.trustStore").map(new File(_))
-        .orElse(defaults.flatMap(_.trustStore))
+      .orElse(defaults.flatMap(_.trustStore))
 
     val trustStorePassword = conf.getOption(s"$ns.trustStorePassword")
-        .orElse(defaults.flatMap(_.trustStorePassword))
+      .orElse(defaults.flatMap(_.trustStorePassword))
+
+    val trustStoreReloadingEnabled = conf.getBoolean(s"$ns.trustStoreReloadingEnabled", false)
+
+    val trustStoreReloadInterval = conf.getInt(s"$ns.trustStoreReloadInterval", 10000)
+
+    val openSslEnabled = conf.getBoolean(s"$ns.openSslEnabled", false)
 
     val protocol = conf.getOption(s"$ns.protocol")
-        .orElse(defaults.flatMap(_.protocol))
+      .orElse(defaults.flatMap(_.protocol))
 
     val enabledAlgorithms = conf.getOption(s"$ns.enabledAlgorithms")
-        .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSet)
-        .orElse(defaults.map(_.enabledAlgorithms))
-        .getOrElse(Set.empty)
+      .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSet)
+      .orElse(defaults.map(_.enabledAlgorithms))
+      .getOrElse(Set.empty)
 
     new SSLOptions(
       enabled,
       keyStore,
       keyStorePassword,
+      privateKey,
       keyPassword,
+      certChain,
       trustStore,
       trustStorePassword,
+      trustStoreReloadingEnabled,
+      trustStoreReloadInterval,
+      openSslEnabled,
       protocol,
       enabledAlgorithms)
   }
-
 }
 

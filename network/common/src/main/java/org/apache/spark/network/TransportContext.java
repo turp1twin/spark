@@ -22,9 +22,12 @@ import java.util.List;
 import com.google.common.collect.Lists;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.util.EncryptionHandler;
+import org.apache.spark.network.util.NoEncryptionHandler;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
@@ -60,11 +63,22 @@ public class TransportContext {
   private final MessageEncoder encoder;
   private final MessageDecoder decoder;
 
+  private final EncryptionHandler encryptionHandler;
+
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
+    this(conf, rpcHandler, new NoEncryptionHandler());
+  }
+
+  public TransportContext(TransportConf conf, RpcHandler rpcHandler, EncryptionHandler encryptionHandler) {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
     this.encoder = new MessageEncoder();
     this.decoder = new MessageDecoder();
+    if (encryptionHandler != null) {
+      this.encryptionHandler = encryptionHandler;
+    } else {
+      this.encryptionHandler = new NoEncryptionHandler();
+    }
   }
 
   /**
@@ -73,21 +87,25 @@ public class TransportContext {
    * to create a Client.
    */
   public TransportClientFactory createClientFactory(List<TransportClientBootstrap> bootstraps) {
-    return new TransportClientFactory(this, bootstraps);
+    return new TransportClientFactory(this, bootstraps, encryptionHandler);
   }
 
+  /**
+   * Initializes a ClientFactory
+   * @return
+   */
   public TransportClientFactory createClientFactory() {
     return createClientFactory(Lists.<TransportClientBootstrap>newArrayList());
   }
 
   /** Create a server which will attempt to bind to a specific port. */
   public TransportServer createServer(int port) {
-    return new TransportServer(this, port);
+    return new TransportServer(this, port, encryptionHandler);
   }
 
   /** Creates a new server, binding to any available ephemeral port. */
   public TransportServer createServer() {
-    return new TransportServer(this, 0);
+    return createServer(0);
   }
 
   /**
@@ -103,9 +121,9 @@ public class TransportContext {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel);
       channel.pipeline()
-        .addLast("encoder", encoder)
         .addLast("frameDecoder", NettyUtils.createFrameDecoder())
         .addLast("decoder", decoder)
+        .addLast("encoder", encoder)
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
         .addLast("handler", channelHandler);
@@ -124,8 +142,7 @@ public class TransportContext {
   private TransportChannelHandler createChannelHandler(Channel channel) {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
-    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
-      rpcHandler);
+    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client, rpcHandler);
     return new TransportChannelHandler(client, responseHandler, requestHandler);
   }
 

@@ -30,14 +30,28 @@ import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.SSLSampleConfigs._
+
 import org.mockito.Mockito._
+
 import org.scalatest.mock.MockitoSugar
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite, ShouldMatchers}
+import org.scalatest.{FunSuite, ShouldMatchers}
 
 class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with ShouldMatchers {
   test("security default off") {
     val conf = new SparkConf()
       .set("spark.app.id", "app-id")
+    testConnection(conf, conf) match {
+      case Success(_) => // expected
+      case Failure(t) => fail(t)
+    }
+  }
+
+  test("ssl with same config") {
+    val conf = sparkSSLConfig()
+    conf.set("spark.app.id", "app-id")
+    val conf1 = conf.clone
+
     testConnection(conf, conf) match {
       case Success(_) => // expected
       case Failure(t) => fail(t)
@@ -55,8 +69,31 @@ class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with Sh
     }
   }
 
+  test("security on same password over ssl") {
+    val conf = sparkSSLConfig()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good")
+      .set("spark.app.id", "app-id")
+    testConnection(conf, conf) match {
+      case Success(_) => // expected
+      case Failure(t) => fail(t)
+    }
+  }
+
   test("security on mismatch password") {
     val conf0 = new SparkConf()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good")
+      .set("spark.app.id", "app-id")
+    val conf1 = conf0.clone.set("spark.authenticate.secret", "bad")
+    testConnection(conf0, conf1) match {
+      case Success(_) => fail("Should have failed")
+      case Failure(t) => t.getMessage should include ("Mismatched response")
+    }
+  }
+
+  test("security on mismatch password over ssl") {
+    val conf0 = sparkSSLConfig()
       .set("spark.authenticate", "true")
       .set("spark.authenticate.secret", "good")
       .set("spark.app.id", "app-id")
@@ -79,8 +116,32 @@ class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with Sh
     }
   }
 
+  test("security mismatch auth off on server over ssl") {
+    val conf0 = sparkSSLConfig()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good")
+      .set("spark.app.id", "app-id")
+    val conf1 = conf0.clone.set("spark.authenticate", "false")
+    testConnection(conf0, conf1) match {
+      case Success(_) => fail("Should have failed")
+      case Failure(t) => // any funny error may occur, sever will interpret SASL token as RPC
+    }
+  }
+
   test("security mismatch auth off on client") {
     val conf0 = new SparkConf()
+      .set("spark.authenticate", "false")
+      .set("spark.authenticate.secret", "good")
+      .set("spark.app.id", "app-id")
+    val conf1 = conf0.clone.set("spark.authenticate", "true")
+    testConnection(conf0, conf1) match {
+      case Success(_) => fail("Should have failed")
+      case Failure(t) => t.getMessage should include ("Expected SaslMessage")
+    }
+  }
+
+  test("security mismatch auth off on client over ssl") {
+    val conf0 = sparkSSLConfig()
       .set("spark.authenticate", "false")
       .set("spark.authenticate.secret", "good")
       .set("spark.app.id", "app-id")
@@ -126,10 +187,10 @@ class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with Sh
 
   /** Synchronously fetches a single block, acting as the given executor fetching from another. */
   private def fetchBlock(
-      self: BlockTransferService,
-      from: BlockTransferService,
-      execId: String,
-      blockId: BlockId): Try[ManagedBuffer] = {
+    self: BlockTransferService,
+    from: BlockTransferService,
+    execId: String,
+    blockId: BlockId): Try[ManagedBuffer] = {
 
     val promise = Promise[ManagedBuffer]()
 

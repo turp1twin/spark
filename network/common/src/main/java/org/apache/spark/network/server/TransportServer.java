@@ -28,9 +28,12 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.util.EncryptionHandler;
+import org.apache.spark.network.util.NoEncryptionHandler;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
@@ -45,18 +48,41 @@ public class TransportServer implements Closeable {
   private final TransportContext context;
   private final TransportConf conf;
 
+  private EncryptionHandler encryptionHandler;
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
   private int port = -1;
 
-  /** Creates a TransportServer that binds to the given port, or to any available if 0. */
+  /**
+   * Creates a TransportServer that binds to the given port, or to any available if 0.
+   */
   public TransportServer(TransportContext context, int portToBind) {
     this.context = context;
     this.conf = context.getConf();
+    this.encryptionHandler = new NoEncryptionHandler();
+    init(portToBind);
+  }
+
+  /**
+   * Creates a secure TransportServer that binds to the given port, or to any available if 0.
+   * @param context
+   * @param portToBind
+   * @param encryptionHandler
+   */
+  public TransportServer(TransportContext context, int portToBind, EncryptionHandler encryptionHandler) {
+    this.context = context;
+    this.conf = context.getConf();
+    this.encryptionHandler =
+      (encryptionHandler != null ? encryptionHandler : new NoEncryptionHandler());
 
     init(portToBind);
   }
 
+  /**
+   * Returns the port this TransportServer will attempt to bind to.
+   *
+   * @return
+   */
   public int getPort() {
     if (port == -1) {
       throw new IllegalStateException("Server not initialized");
@@ -64,8 +90,12 @@ public class TransportServer implements Closeable {
     return port;
   }
 
+  /**
+   * Initializes this TransportServer.
+   *
+   * @param portToBind
+   */
   private void init(int portToBind) {
-
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     EventLoopGroup bossGroup =
       NettyUtils.createEventLoop(ioMode, conf.serverThreads(), "shuffle-server");
@@ -92,18 +122,27 @@ public class TransportServer implements Closeable {
       bootstrap.childOption(ChannelOption.SO_SNDBUF, conf.sendBuf());
     }
 
-    bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
-      @Override
-      protected void initChannel(SocketChannel ch) throws Exception {
-        context.initializePipeline(ch);
-      }
-    });
-
+    initHandler();
     bindRightPort(portToBind);
 
     port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
     logger.debug("Shuffle server started on port :" + port);
   }
+
+  /**
+   * Initialize and add the appropriate Netty ChannelHandler
+   */
+  private void initHandler() {
+    bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
+      @Override
+      protected void initChannel(SocketChannel ch) throws Exception {
+        context.initializePipeline(ch);
+        encryptionHandler.addToPipeline(ch.pipeline(), false);
+      }
+    });
+  }
+
+
 
   @Override
   public void close() {
@@ -119,6 +158,9 @@ public class TransportServer implements Closeable {
       bootstrap.childGroup().shutdownGracefully();
     }
     bootstrap = null;
+
+    encryptionHandler.close();
+    encryptionHandler = null;
   }
 
   /**

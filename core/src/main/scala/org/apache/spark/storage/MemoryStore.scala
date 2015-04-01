@@ -464,7 +464,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
             } else {
               Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
             }
-            val droppedBlockStatus = blockManager.dropFromMemory(blockId, data)
+            val droppedBlockStatus = blockManager.dropFromMemory(blockId, () => data)
             droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
           }
         }

@@ -21,9 +21,12 @@ import java.io.IOException;
 import java.util.List;
 
 import com.google.common.collect.Lists;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.util.EncryptionHandler;
+import org.apache.spark.network.util.NoEncryptionHandler;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
@@ -47,6 +50,7 @@ public class ExternalShuffleClient extends ShuffleClient {
   private final TransportConf conf;
   private final boolean saslEnabled;
   private final SecretKeyHolder secretKeyHolder;
+  private final EncryptionHandler encryptionHandler;
 
   private TransportClientFactory clientFactory;
   private String appId;
@@ -54,20 +58,40 @@ public class ExternalShuffleClient extends ShuffleClient {
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
    * then secretKeyHolder may be null.
+   * @param conf
+   * @param secretKeyHolder
+   * @param saslEnabled
    */
   public ExternalShuffleClient(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
       boolean saslEnabled) {
+    this(conf, secretKeyHolder, saslEnabled, new NoEncryptionHandler());
+  }
+
+  /**
+   * Creates an external shuffle client, with SASL optionally enabled, and an optional {@link EncryptionHandler}.
+   * If SASL is not enabled then secretKeyHolder may be null.
+   * @param conf
+   * @param secretKeyHolder
+   * @param saslEnabled
+   * @param encryptionHandler
+   */
+  public ExternalShuffleClient(
+      TransportConf conf,
+      SecretKeyHolder secretKeyHolder,
+      boolean saslEnabled,
+      EncryptionHandler encryptionHandler) {
     this.conf = conf;
     this.secretKeyHolder = secretKeyHolder;
     this.saslEnabled = saslEnabled;
+    this.encryptionHandler = encryptionHandler;
   }
 
   @Override
   public void init(String appId) {
     this.appId = appId;
-    TransportContext context = new TransportContext(conf, new NoOpRpcHandler());
+    TransportContext context = new TransportContext(conf, new NoOpRpcHandler(), encryptionHandler);
     List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
     if (saslEnabled) {
       bootstraps.add(new SaslClientBootstrap(conf, appId, secretKeyHolder));

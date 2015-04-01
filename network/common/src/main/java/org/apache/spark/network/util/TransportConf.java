@@ -100,6 +100,22 @@ public class TransportConf {
   }
 
   /**
+   * When Secure (SSL/TLS) Shuffle is enabled, the Chunk size to use for shuffling files.
+   * @return
+   */
+  public int sslShuffleChunkSize() {
+    return conf.getInt("spark.shuffle.io.ssl.chunkSize", 60 * 1024);
+  }
+
+  /**
+   * Whether Secure (SSL/TLS) Shuffle (Block Transfer Service) is enabled
+   * @return
+   */
+  public boolean sslShuffleEnabled() {
+    return conf.getBoolean("spark.ssl.bts.enabled", false);
+  }
+
+  /**
    * Maximum number of retries when binding to a port before giving up.
    */
   public int portMaxRetries() {

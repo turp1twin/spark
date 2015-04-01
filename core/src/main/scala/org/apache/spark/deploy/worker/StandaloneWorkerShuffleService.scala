@@ -38,12 +38,11 @@ class StandaloneWorkerShuffleService(sparkConf: SparkConf, securityManager: Secu
   private val enabled = sparkConf.getBoolean("spark.shuffle.service.enabled", false)
   private val port = sparkConf.getInt("spark.shuffle.service.port", 7337)
   private val useSasl: Boolean = securityManager.isAuthenticationEnabled()
-
   private val transportConf = SparkTransportConf.fromSparkConf(sparkConf, numUsableCores = 0)
   private val blockHandler = new ExternalShuffleBlockHandler(transportConf)
   private val transportContext: TransportContext = {
     val handler = if (useSasl) new SaslRpcHandler(blockHandler, securityManager) else blockHandler
-    new TransportContext(transportConf, handler)
+    new TransportContext(transportConf, handler, securityManager.createEncryptionHandler())
   }
 
   private var server: TransportServer = _
