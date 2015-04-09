@@ -70,10 +70,8 @@ public class SslEncryptionHandler implements TransportEncryptionHandler {
   public void addToPipeline(ChannelPipeline pipeline, boolean isClient) {
     pipeline.addFirst(getName(), createChannelHandler(isClient));
 
-    //if (!isClient) {
-      // Cannot use zero-copy with HTTPS, so we add in our ChunkedWriteHandler just before our MessageDecoder
-      pipeline.addBefore("encoder", "chunkedWriter", new ChunkedWriteHandler());
-    //}
+    // Cannot use zero-copy with HTTPS, so we add in our ChunkedWriteHandler just before our MessageEncoder
+    pipeline.addBefore("encoder", "chunkedWriter", new ChunkedWriteHandler());
   }
 
   /**

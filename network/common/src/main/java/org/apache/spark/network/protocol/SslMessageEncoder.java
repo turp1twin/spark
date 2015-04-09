@@ -21,8 +21,10 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
-import io.netty.handler.stream.ChunkedInput;
+import io.netty.handler.stream.ChunkedFile;
+
 import org.apache.spark.network.util.ChunkedFileWithHeader;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +43,7 @@ public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
    * Encodes a Message by invoking its encode() method. For non-data messages, we will add one
    * ByteBuf to 'out' containing the total frame length, the message type, and the message itself.
    * In the case of a ChunkFetchSuccess, we will also add the ManagedBuffer corresponding to the
-   * data to 'out', in order to enable zero-copy transfer.
+   * data to 'out'.
    * @param ctx
    * @param in
    * @param out
@@ -80,10 +82,12 @@ public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
     assert header.writableBytes() == 0;
 
     if (body != null && bodyLength > 0) {
-      if (body instanceof ChunkedInput) {
+      if (body instanceof ChunkedFile) {
         out.add(new ChunkedFileWithHeader(header, body));
-      } else {
+      } else if (body instanceof ByteBuf){
         out.add(Unpooled.wrappedBuffer(header, (ByteBuf) body));
+      } else {
+        throw new IllegalArgumentException("Body must be a ByteBuf or a ChunkedFile.");
       }
     } else {
       out.add(header);
