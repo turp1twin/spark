@@ -19,14 +19,13 @@ package org.apache.spark.network.util;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelPipeline;
-import org.apache.spark.network.util.EncryptionHandler;
 
 import java.net.InetSocketAddress;
 
 /**
- * No op implementation of the {@link EncryptionHandler} interface
+ * No op implementation of the {@link TransportEncryptionHandler} interface
  */
-public class NoEncryptionHandler implements EncryptionHandler {
+public class NoEncryptionHandler implements TransportEncryptionHandler {
 
   @Override
   public String getName() {
@@ -51,5 +50,10 @@ public class NoEncryptionHandler implements EncryptionHandler {
   @Override
   public void close() {
     // No op
+  }
+
+  @Override
+  public boolean isEnabled() {
+    return false;
   }
 }

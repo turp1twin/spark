@@ -25,7 +25,7 @@ import java.net.InetSocketAddress;
 /**
  *
  */
-public interface EncryptionHandler {
+public interface TransportEncryptionHandler {
 
   /**
    *
@@ -56,4 +56,10 @@ public interface EncryptionHandler {
    *
    */
   void close();
+
+  /**
+   *
+   * @return
+   */
+  boolean isEnabled();
 }

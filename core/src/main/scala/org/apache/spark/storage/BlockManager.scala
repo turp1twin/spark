@@ -105,8 +105,8 @@ private[spark] class BlockManager(
 
   // Check that we're not using external shuffle service with consolidated shuffle files.
   if (externalShuffleServiceEnabled
-      && conf.getBoolean("spark.shuffle.consolidateFiles", false)
-      && shuffleManager.isInstanceOf[HashShuffleManager]) {
+    && conf.getBoolean("spark.shuffle.consolidateFiles", false)
+    && shuffleManager.isInstanceOf[HashShuffleManager]) {
     throw new UnsupportedOperationException("Cannot use external shuffle service with consolidated"
       + " shuffle files in hash-based shuffle. Please disable spark.shuffle.consolidateFiles or "
       + " switch to sort-based shuffle.")
@@ -122,9 +122,8 @@ private[spark] class BlockManager(
   // standard BlockTransferService to directly connect to other Executors.
   private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
     val transConf = SparkTransportConf.fromSparkConf(conf, numUsableCores)
-    new ExternalShuffleClient(
-      transConf, securityManager,
-      securityManager.isAuthenticationEnabled(), securityManager.createEncryptionHandler())
+    new ExternalShuffleClient(transConf, securityManager, securityManager.isAuthenticationEnabled(),
+      securityManager.isSaslEncryptionEnabled(), securityManager.createEncryptionHandler())
   } else {
     blockTransferService
   }
@@ -699,7 +698,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None)
-    : Seq[(BlockId, BlockStatus)] = {
+  : Seq[(BlockId, BlockStatus)] = {
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")

@@ -14,33 +14,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.network.protocol;
 
-import java.util.List;
-
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
-
+import io.netty.handler.stream.ChunkedInput;
+import org.apache.spark.network.util.ChunkedFileWithHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+
 /**
- * Encoder used by the server side to encode server-to-client responses.
+ * Encoder used by the server side to encode secure (SSL) server-to-client responses.
  * This encoder is stateless so it is safe to be shared by multiple threads.
  */
 @ChannelHandler.Sharable
-public final class MessageEncoder extends MessageToMessageEncoder<Message> {
+public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
 
-  private final Logger logger = LoggerFactory.getLogger(MessageEncoder.class);
+  private final Logger logger = LoggerFactory.getLogger(SslMessageEncoder.class);
 
-  /***
+  /**
    * Encodes a Message by invoking its encode() method. For non-data messages, we will add one
    * ByteBuf to 'out' containing the total frame length, the message type, and the message itself.
    * In the case of a ChunkFetchSuccess, we will also add the ManagedBuffer corresponding to the
    * data to 'out', in order to enable zero-copy transfer.
+   * @param ctx
+   * @param in
+   * @param out
    */
   @Override
   public void encode(ChannelHandlerContext ctx, Message in, List<Object> out) {
@@ -48,7 +52,9 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     long bodyLength = 0;
 
     // Only ChunkFetchSuccesses have data besides the header.
-    // The body is used in order to enable zero-copy transfer for the payload.
+    // For SSL, zero-copy transfer will not work, so we will check if
+    // the body is a ChunkedFile, and if so, use a ChunkedFileWithHeader
+    // to wrap the header+body appropriately (for thread safety).
     if (in instanceof ChunkFetchSuccess) {
       ChunkFetchSuccess resp = (ChunkFetchSuccess) in;
       try {
@@ -74,10 +80,13 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     assert header.writableBytes() == 0;
 
     if (body != null && bodyLength > 0) {
-      out.add(new MessageWithHeader(header, body, bodyLength));
+      if (body instanceof ChunkedInput) {
+        out.add(new ChunkedFileWithHeader(header, body));
+      } else {
+        out.add(Unpooled.wrappedBuffer(header, (ByteBuf) body));
+      }
     } else {
       out.add(header);
     }
   }
-
 }

@@ -15,20 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.client;
+package org.apache.spark.network.server;
 
 import io.netty.channel.Channel;
 
 /**
- * A bootstrap which is executed on a TransportClient before it is returned to the user.
- * This enables an initial exchange of information (e.g., SASL authentication tokens) on a once-per-
- * connection basis.
- *
- * Since connections (and TransportClients) are reused as much as possible, it is generally
- * reasonable to perform an expensive bootstrapping operation, as they often share a lifespan with
- * the JVM itself.
+ * A bootstrap which is executed on a TransportServer's client channel once a client connects
+ * to the server. This allows customizing the client channel to allow for things such as SASL
+ * authentication.
  */
-public interface TransportClientBootstrap {
-  /** Performs the bootstrapping operation, throwing an exception on failure. */
-  void doBootstrap(TransportClient client, Channel channel) throws RuntimeException;
+public interface TransportServerBootstrap {
+  /**
+   * Customizes the channel to include new features, if needed.
+   *
+   * @param channel The connected channel opened by the client.
+   * @param rpcHandler The RPC handler for the server.
+   * @return The RPC handler to use for the channel.
+   */
+  RpcHandler doBootstrap(Channel channel, RpcHandler rpcHandler);
 }

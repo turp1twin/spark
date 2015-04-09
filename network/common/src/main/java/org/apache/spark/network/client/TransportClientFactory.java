@@ -42,7 +42,7 @@ import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.util.EncryptionHandler;
+import org.apache.spark.network.util.TransportEncryptionHandler;
 import org.apache.spark.network.util.NoEncryptionHandler;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
@@ -86,7 +86,7 @@ public class TransportClientFactory implements Closeable {
   private final List<TransportClientBootstrap> clientBootstraps;
   private final ConcurrentHashMap<SocketAddress, ClientPool> connectionPool;
 
-  private EncryptionHandler encryptionHandler;
+  private TransportEncryptionHandler encryptionHandler;
 
   /** Random number generator for picking connections between peers. */
   private final Random rand;
@@ -105,7 +105,7 @@ public class TransportClientFactory implements Closeable {
   public TransportClientFactory(
       TransportContext context,
       List<TransportClientBootstrap> clientBootstraps,
-      EncryptionHandler encryptionHandler) {
+      TransportEncryptionHandler encryptionHandler) {
     this.context = Preconditions.checkNotNull(context);
     this.conf = context.getConf();
     this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
@@ -192,7 +192,8 @@ public class TransportClientFactory implements Closeable {
     logger.debug("Creating new connection to " + address);
     Bootstrap bootstrap = buildBootstrap();
     final AtomicReference<TransportClient> clientRef = new AtomicReference<TransportClient>();
-    initHandler(bootstrap, clientRef);
+    final AtomicReference<Channel> channelRef = new AtomicReference<Channel>();
+    initHandler(bootstrap, clientRef, channelRef);
 
     // Connect to the remote server
     long preConnect = System.nanoTime();
@@ -200,12 +201,13 @@ public class TransportClientFactory implements Closeable {
     encryptionHandler.onConnect(cf, address);
 
     TransportClient client = clientRef.get();
+    Channel channel = channelRef.get();
     assert client != null : "Channel future completed successfully with null client";
 
     // Execute any client bootstraps synchronously before marking the Client as successful.
     long preBootstrap = System.nanoTime();
     logger.debug("Connection to {} successful, running bootstraps...", address);
-    doBootstraps(client, preBootstrap);
+    doBootstraps(client, channel, preBootstrap);
     long postBootstrap = System.nanoTime();
 
     logger.debug("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
@@ -248,14 +250,18 @@ public class TransportClientFactory implements Closeable {
   }
 
   /**
-   *
+   * Execute all of our {@link TransportClientBootstrap} bootstraps.
    * @param client
+   * @param channel
    * @param preBootstrap
    */
-  private void doBootstraps(TransportClient client, long preBootstrap) {
+  private void doBootstraps(
+      TransportClient client,
+      Channel channel,
+      long preBootstrap) {
     try {
       for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
-        clientBootstrap.doBootstrap(client);
+        clientBootstrap.doBootstrap(client, channel);
       }
     } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
       long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
@@ -271,13 +277,15 @@ public class TransportClientFactory implements Closeable {
    */
   private void initHandler(
       final Bootstrap bootstrap,
-      final AtomicReference<TransportClient> clientRef) {
+      final AtomicReference<TransportClient> clientRef,
+      final AtomicReference<Channel> channelRef) {
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) throws Exception {
         TransportChannelHandler clientHandler = context.initializePipeline(ch);
         encryptionHandler.addToPipeline(ch.pipeline(), true);
         clientRef.set(clientHandler.getClient());
+        channelRef.set(ch);
       }
     });
   }

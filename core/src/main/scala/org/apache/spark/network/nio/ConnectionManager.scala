@@ -85,11 +85,11 @@ private[nio] class ConnectionManager(
     conf.getInt("spark.core.connection.ack.wait.timeout", conf.getInt("spark.network.timeout", 120))
 
   // Get the thread counts from the Spark Configuration.
-  // 
+  //
   // Even though the ThreadPoolExecutor constructor takes both a minimum and maximum value,
   // we only query for the minimum value because we are using LinkedBlockingDeque.
-  // 
-  // The JavaDoc for ThreadPoolExecutor points out that when using a LinkedBlockingDeque (which is 
+  //
+  // The JavaDoc for ThreadPoolExecutor points out that when using a LinkedBlockingDeque (which is
   // an unbounded queue) no more than corePoolSize threads will ever be created, so only the "min"
   // parameter is necessary.
   private val handlerThreadCount = conf.getInt("spark.core.connection.handler.threads.min", 20)
@@ -372,7 +372,7 @@ private[nio] class ConnectionManager(
 
                   logTrace("Changed key for connection to [" +
                     connection.getRemoteConnectionManagerId()  + "] changed from [" +
-                      intToOpStr(lastOps) + "] to [" + intToOpStr(ops) + "]")
+                    intToOpStr(lastOps) + "] to [" + intToOpStr(ops) + "]")
                 }
               }
             } else {
@@ -420,7 +420,7 @@ private[nio] class ConnectionManager(
                 }
               }
             }
-            0
+              0
           }
 
         if (selectedKeysCount == 0) {
@@ -524,9 +524,9 @@ private[nio] class ConnectionManager(
           messageStatuses.synchronized {
             messageStatuses.values.filter(_.connectionManagerId == sendingConnectionManagerId)
               .foreach(status => {
-                logInfo("Notifying " + status)
-                status.failWithoutAck()
-              })
+              logInfo("Notifying " + status)
+              status.failWithoutAck()
+            })
 
             messageStatuses.retain((i, status) => {
               status.connectionManagerId != sendingConnectionManagerId
@@ -651,7 +651,7 @@ private[nio] class ConnectionManager(
         connection.synchronized {
           if (connection.sparkSaslServer == null) {
             logDebug("Creating sasl Server")
-            connection.sparkSaslServer = new SparkSaslServer(conf.getAppId, securityManager)
+            connection.sparkSaslServer = new SparkSaslServer(conf.getAppId, securityManager, false)
           }
         }
         replyToken = connection.sparkSaslServer.response(securityMsg.getToken)
@@ -709,7 +709,7 @@ private[nio] class ConnectionManager(
         // We could handle this better and tell the client we need to do authentication
         // negotiation, but for now just ignore them.
         logError("message sent that is not security negotiation message on connection " +
-                 "not authenticated yet, ignoring it!!")
+          "not authenticated yet, ignoring it!!")
         return true
       }
     }
@@ -795,7 +795,7 @@ private[nio] class ConnectionManager(
     if (!conn.isSaslComplete()) {
       conn.synchronized {
         if (conn.sparkSaslClient == null) {
-          conn.sparkSaslClient = new SparkSaslClient(conf.getAppId, securityManager)
+          conn.sparkSaslClient = new SparkSaslClient(conf.getAppId, securityManager, false)
           var firstResponse: Array[Byte] = null
           try {
             firstResponse = conn.sparkSaslClient.firstToken()
@@ -912,7 +912,7 @@ private[nio] class ConnectionManager(
    * @return a Future that either returns the acknowledgment message or captures an exception.
    */
   def sendMessageReliably(connectionManagerId: ConnectionManagerId, message: Message)
-      : Future[Message] = {
+  : Future[Message] = {
     val promise = Promise[Message]()
 
     // It's important that the TimerTask doesn't capture a reference to `message`, which can cause
@@ -1127,14 +1127,14 @@ private[spark] object ConnectionManager {
     val startTime = System.currentTimeMillis
     while(true) {
       (0 until count).map(i => {
-          val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-          manager.sendMessageReliably(manager.id, bufferMessage)
-        }).foreach(f => {
-          f.onFailure {
-            case e => println("Failed due to " + e)
-          }
-          Await.ready(f, 1 second)
-        })
+        val bufferMessage = Message.createBufferMessage(buffer.duplicate)
+        manager.sendMessageReliably(manager.id, bufferMessage)
+      }).foreach(f => {
+        f.onFailure {
+          case e => println("Failed due to " + e)
+        }
+        Await.ready(f, 1 second)
+      })
       val finishTime = System.currentTimeMillis
       Thread.sleep(1000)
       val mb = size * count / 1024.0 / 1024.0

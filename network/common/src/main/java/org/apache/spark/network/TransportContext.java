@@ -23,10 +23,13 @@ import com.google.common.collect.Lists;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 
+import io.netty.handler.codec.MessageToMessageEncoder;
+import org.apache.spark.network.protocol.Message;
+import org.apache.spark.network.protocol.SslMessageEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.util.EncryptionHandler;
+import org.apache.spark.network.util.TransportEncryptionHandler;
 import org.apache.spark.network.util.NoEncryptionHandler;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
@@ -38,6 +41,7 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.server.TransportRequestHandler;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -58,27 +62,31 @@ public class TransportContext {
   private final Logger logger = LoggerFactory.getLogger(TransportContext.class);
 
   private final TransportConf conf;
-  private final RpcHandler rpcHandler;
+  private final RpcHandler appRpcHandler;
 
-  private final MessageEncoder encoder;
+  private final MessageToMessageEncoder<Message> encoder;
   private final MessageDecoder decoder;
 
-  private final EncryptionHandler encryptionHandler;
+  private final TransportEncryptionHandler encryptionHandler;
 
-  public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
-    this(conf, rpcHandler, new NoEncryptionHandler());
+  public TransportContext(TransportConf conf, RpcHandler appRpcHandler) {
+    this(conf, appRpcHandler, new NoEncryptionHandler());
   }
 
-  public TransportContext(TransportConf conf, RpcHandler rpcHandler, EncryptionHandler encryptionHandler) {
+  public TransportContext(
+      TransportConf conf,
+      RpcHandler appRpcHandler,
+      TransportEncryptionHandler encryptionHandler) {
     this.conf = conf;
-    this.rpcHandler = rpcHandler;
-    this.encoder = new MessageEncoder();
+    this.appRpcHandler = appRpcHandler;
     this.decoder = new MessageDecoder();
     if (encryptionHandler != null) {
       this.encryptionHandler = encryptionHandler;
     } else {
       this.encryptionHandler = new NoEncryptionHandler();
     }
+    this.encoder =
+      (this.encryptionHandler.isEnabled() ? new SslMessageEncoder() : new MessageEncoder());
   }
 
   /**
@@ -99,13 +107,32 @@ public class TransportContext {
   }
 
   /** Create a server which will attempt to bind to a specific port. */
-  public TransportServer createServer(int port) {
-    return new TransportServer(this, port, encryptionHandler);
+  public TransportServer createServer(int port, List<TransportServerBootstrap> bootstraps) {
+    return new TransportServer(this, port, appRpcHandler, encryptionHandler, bootstraps);
   }
 
   /** Creates a new server, binding to any available ephemeral port. */
+  public TransportServer createServer(List<TransportServerBootstrap> bootstraps) {
+    return createServer(0, bootstraps);
+  }
+
   public TransportServer createServer() {
-    return createServer(0);
+    return createServer(0, Lists.<TransportServerBootstrap>newArrayList());
+  }
+
+  /**
+   * Initializes a client or server Netty Channel Pipeline which encodes/decodes messages and
+   * has a {@link org.apache.spark.network.server.TransportChannelHandler} to handle request or
+   * response messages.
+   *
+   * @return Returns the created TransportChannelHandler, which includes a TransportClient that can
+   * be used to communicate on this channel. The TransportClient is directly associated with a
+   * ChannelHandler to ensure all users of the same channel get the same TransportClient object.
+   * @param channel
+   * @return
+   */
+  public TransportChannelHandler initializePipeline(SocketChannel channel) {
+    return initializePipeline(channel, appRpcHandler);
   }
 
   /**
@@ -117,13 +144,13 @@ public class TransportContext {
    * be used to communicate on this channel. The TransportClient is directly associated with a
    * ChannelHandler to ensure all users of the same channel get the same TransportClient object.
    */
-  public TransportChannelHandler initializePipeline(SocketChannel channel) {
+  public TransportChannelHandler initializePipeline(SocketChannel channel, RpcHandler rpcHandler) {
     try {
-      TransportChannelHandler channelHandler = createChannelHandler(channel);
+      TransportChannelHandler channelHandler = createChannelHandler(channel, rpcHandler);
       channel.pipeline()
+        .addLast("encoder", encoder)
         .addLast("frameDecoder", NettyUtils.createFrameDecoder())
         .addLast("decoder", decoder)
-        .addLast("encoder", encoder)
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
         .addLast("handler", channelHandler);
@@ -139,10 +166,11 @@ public class TransportContext {
    * ResponseMessages. The channel is expected to have been successfully created, though certain
    * properties (such as the remoteAddress()) may not be available yet.
    */
-  private TransportChannelHandler createChannelHandler(Channel channel) {
+  private TransportChannelHandler createChannelHandler(Channel channel, RpcHandler rpcHandler) {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
-    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client, rpcHandler);
+    TransportRequestHandler requestHandler =
+      new TransportRequestHandler(channel, client, rpcHandler);
     return new TransportChannelHandler(client, responseHandler, requestHandler);
   }
 

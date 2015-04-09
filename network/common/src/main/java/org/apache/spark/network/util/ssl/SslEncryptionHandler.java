@@ -25,7 +25,7 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
-import org.apache.spark.network.util.EncryptionHandler;
+import org.apache.spark.network.util.TransportEncryptionHandler;
 import org.apache.spark.network.util.TransportConf;
 
 import org.slf4j.Logger;
@@ -36,7 +36,7 @@ import java.net.InetSocketAddress;
 /**
  *
  */
-public class SslEncryptionHandler implements EncryptionHandler {
+public class SslEncryptionHandler implements TransportEncryptionHandler {
 
   private final Logger logger = LoggerFactory.getLogger(SslEncryptionHandler.class);
 
@@ -70,10 +70,10 @@ public class SslEncryptionHandler implements EncryptionHandler {
   public void addToPipeline(ChannelPipeline pipeline, boolean isClient) {
     pipeline.addFirst(getName(), createChannelHandler(isClient));
 
-    if (!isClient) {
+    //if (!isClient) {
       // Cannot use zero-copy with HTTPS, so we add in our ChunkedWriteHandler just before our MessageDecoder
-      pipeline.addBefore("decoder", "chunkedWriter", new ChunkedWriteHandler());
-    }
+      pipeline.addBefore("encoder", "chunkedWriter", new ChunkedWriteHandler());
+    //}
   }
 
   /**
@@ -117,5 +117,14 @@ public class SslEncryptionHandler implements EncryptionHandler {
   @Override
   public void close() {
     sslFactory.destroy();
+  }
+
+  /**
+   *
+   * @return
+   */
+  @Override
+  public boolean isEnabled() {
+    return true;
   }
 }

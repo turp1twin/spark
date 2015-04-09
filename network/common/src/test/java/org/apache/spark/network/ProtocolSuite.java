@@ -39,6 +39,7 @@ import org.apache.spark.network.protocol.RpcFailure;
 import org.apache.spark.network.protocol.RpcRequest;
 import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamChunkId;
+import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.NettyUtils;
 
 public class ProtocolSuite {
@@ -48,7 +49,7 @@ public class ProtocolSuite {
     serverChannel.writeOutbound(msg);
 
     EmbeddedChannel clientChannel = new EmbeddedChannel(
-        NettyUtils.createFrameDecoder(), new MessageDecoder());
+      NettyUtils.createFrameDecoder(), new MessageDecoder());
 
     while (!serverChannel.outboundMessages().isEmpty()) {
       clientChannel.writeInbound(serverChannel.readOutbound());
@@ -64,7 +65,7 @@ public class ProtocolSuite {
     clientChannel.writeOutbound(msg);
 
     EmbeddedChannel serverChannel = new EmbeddedChannel(
-        NettyUtils.createFrameDecoder(), new MessageDecoder());
+      NettyUtils.createFrameDecoder(), new MessageDecoder());
 
     while (!clientChannel.outboundMessages().isEmpty()) {
       serverChannel.writeInbound(clientChannel.readOutbound());
@@ -110,7 +111,5 @@ public class ProtocolSuite {
       }
       out.add(Unpooled.wrappedBuffer(channel.getData()));
     }
-
   }
-
 }

@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
-import org.apache.spark.network.util.EncryptionHandler;
+import org.apache.spark.network.util.TransportEncryptionHandler;
 import org.apache.spark.network.util.ssl.SslEncryptionHandler;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -150,9 +150,9 @@ public class SecureExternalShuffleIntegrationSuite {
     res.buffers = Collections.synchronizedList(new LinkedList<ManagedBuffer>());
 
     final Semaphore requestsRemaining = new Semaphore(0);
-    final EncryptionHandler encryptionHandler = new SslEncryptionHandler(
+    final TransportEncryptionHandler encryptionHandler = new SslEncryptionHandler(
       SSLSampleConfigs.createTrustedSSLFactory(), conf);
-    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false, encryptionHandler);
+    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false, false, encryptionHandler);
     client.init(APP_ID);
     client.fetchBlocks(TestUtils.getLocalHost(), port, execId, blockIds,
       new BlockFetchingListener() {
@@ -290,9 +290,9 @@ public class SecureExternalShuffleIntegrationSuite {
 
   private void registerExecutor(String executorId, ExecutorShuffleInfo executorInfo)
     throws IOException {
-    final EncryptionHandler encryptionHandler = new SslEncryptionHandler(
+    final TransportEncryptionHandler encryptionHandler = new SslEncryptionHandler(
       SSLSampleConfigs.createTrustedSSLFactory(), conf);
-    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false, encryptionHandler);
+    ExternalShuffleClient client = new ExternalShuffleClient(conf, null, false, false, encryptionHandler);
     client.init(APP_ID);
     client.registerWithShuffleServer(TestUtils.getLocalHost(), server.getPort(),
       executorId, executorInfo);
