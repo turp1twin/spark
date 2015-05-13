@@ -29,4 +29,5 @@ interface SaslEncryptionBackend {
 
   /** Decrypt data. */
   byte[] unwrap(byte[] data, int offset, int len) throws SaslException;
+
 }

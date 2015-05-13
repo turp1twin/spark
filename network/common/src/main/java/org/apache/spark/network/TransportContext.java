@@ -22,6 +22,7 @@ import java.util.List;
 import com.google.common.collect.Lists;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.timeout.IdleStateHandler;
 
 import io.netty.handler.codec.MessageToMessageEncoder;
 import org.apache.spark.network.protocol.Message;
@@ -62,7 +63,7 @@ public class TransportContext {
   private final Logger logger = LoggerFactory.getLogger(TransportContext.class);
 
   private final TransportConf conf;
-  private final RpcHandler appRpcHandler;
+  private final RpcHandler rpcHandler;
 
   private final MessageToMessageEncoder<Message> encoder;
   private final MessageDecoder decoder;
@@ -75,10 +76,11 @@ public class TransportContext {
 
   public TransportContext(
       TransportConf conf,
-      RpcHandler appRpcHandler,
+      RpcHandler rpcHandler,
       TransportEncryptionHandler encryptionHandler) {
     this.conf = conf;
-    this.appRpcHandler = appRpcHandler;
+    this.rpcHandler = rpcHandler;
+    this.encoder = new MessageEncoder();
     this.decoder = new MessageDecoder();
     if (encryptionHandler != null) {
       this.encryptionHandler = encryptionHandler;
@@ -98,17 +100,13 @@ public class TransportContext {
     return new TransportClientFactory(this, bootstraps, encryptionHandler);
   }
 
-  /**
-   * Initializes a ClientFactory
-   * @return
-   */
   public TransportClientFactory createClientFactory() {
     return createClientFactory(Lists.<TransportClientBootstrap>newArrayList());
   }
 
   /** Create a server which will attempt to bind to a specific port. */
   public TransportServer createServer(int port, List<TransportServerBootstrap> bootstraps) {
-    return new TransportServer(this, port, appRpcHandler, encryptionHandler, bootstraps);
+    return new TransportServer(this, port, rpcHandler, bootstraps);
   }
 
   /** Creates a new server, binding to any available ephemeral port. */
@@ -120,19 +118,8 @@ public class TransportContext {
     return createServer(0, Lists.<TransportServerBootstrap>newArrayList());
   }
 
-  /**
-   * Initializes a client or server Netty Channel Pipeline which encodes/decodes messages and
-   * has a {@link org.apache.spark.network.server.TransportChannelHandler} to handle request or
-   * response messages.
-   *
-   * @return Returns the created TransportChannelHandler, which includes a TransportClient that can
-   * be used to communicate on this channel. The TransportClient is directly associated with a
-   * ChannelHandler to ensure all users of the same channel get the same TransportClient object.
-   * @param channel
-   * @return
-   */
   public TransportChannelHandler initializePipeline(SocketChannel channel) {
-    return initializePipeline(channel, appRpcHandler);
+    return initializePipeline(channel, rpcHandler);
   }
 
   /**
@@ -140,17 +127,23 @@ public class TransportContext {
    * has a {@link org.apache.spark.network.server.TransportChannelHandler} to handle request or
    * response messages.
    *
+   * @param channel The channel to initialize.
+   * @param channelRpcHandler The RPC handler to use for the channel.
+   *
    * @return Returns the created TransportChannelHandler, which includes a TransportClient that can
    * be used to communicate on this channel. The TransportClient is directly associated with a
    * ChannelHandler to ensure all users of the same channel get the same TransportClient object.
    */
-  public TransportChannelHandler initializePipeline(SocketChannel channel, RpcHandler rpcHandler) {
+  public TransportChannelHandler initializePipeline(
+      SocketChannel channel,
+      RpcHandler channelRpcHandler) {
     try {
-      TransportChannelHandler channelHandler = createChannelHandler(channel, rpcHandler);
+      TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
       channel.pipeline()
         .addLast("encoder", encoder)
         .addLast("frameDecoder", NettyUtils.createFrameDecoder())
         .addLast("decoder", decoder)
+        .addLast("idleStateHandler", new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
         .addLast("handler", channelHandler);
@@ -169,9 +162,10 @@ public class TransportContext {
   private TransportChannelHandler createChannelHandler(Channel channel, RpcHandler rpcHandler) {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
     TransportClient client = new TransportClient(channel, responseHandler);
-    TransportRequestHandler requestHandler =
-      new TransportRequestHandler(channel, client, rpcHandler);
-    return new TransportChannelHandler(client, responseHandler, requestHandler);
+    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
+      rpcHandler);
+    return new TransportChannelHandler(client, responseHandler, requestHandler,
+      conf.connectionTimeoutMs());
   }
 
   public TransportConf getConf() { return conf; }

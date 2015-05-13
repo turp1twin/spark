@@ -29,7 +29,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
-
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -38,7 +37,6 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,19 +51,17 @@ import org.apache.spark.network.util.TransportConf;
 
 /**
  * Factory for creating {@link TransportClient}s by using createClient.
- * <p/>
+ *
  * The factory maintains a connection pool to other hosts and should return the same
  * TransportClient for the same remote host. It also shares a single worker thread pool for
  * all TransportClients.
- * <p/>
+ *
  * TransportClients will be reused whenever possible. Prior to completing the creation of a new
  * TransportClient, all given {@link TransportClientBootstrap}s will be run.
  */
 public class TransportClientFactory implements Closeable {
 
-  /**
-   * A simple data structure to track the pool of clients between two peer nodes.
-   */
+  /** A simple data structure to track the pool of clients between two peer nodes. */
   private static class ClientPool {
     TransportClient[] clients;
     Object[] locks;
@@ -179,17 +175,10 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
-  /**
-   * Create a completely new {@link TransportClient} to the remote address.
-   * If a non null {@link javax.net.ssl.SSLEngine} member is present, a secure TransportClient
-   * will be created.
-   *
-   * @param address
-   * @return
-   * @throws IOException
-   */
+  /** Create a completely new {@link TransportClient} to the remote address. */
   private TransportClient createClient(InetSocketAddress address) throws IOException {
     logger.debug("Creating new connection to " + address);
+
     Bootstrap bootstrap = buildBootstrap();
     final AtomicReference<TransportClient> clientRef = new AtomicReference<TransportClient>();
     final AtomicReference<Channel> channelRef = new AtomicReference<Channel>();
@@ -211,7 +200,7 @@ public class TransportClientFactory implements Closeable {
     long postBootstrap = System.nanoTime();
 
     logger.debug("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
-      address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
+            address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
 
     return client;
   }
@@ -224,11 +213,11 @@ public class TransportClientFactory implements Closeable {
    * @throws IOException
    */
   private ChannelFuture connect(
-      Bootstrap bootstrap, TransportConf conf, InetSocketAddress address) throws IOException {
+          Bootstrap bootstrap, TransportConf conf, InetSocketAddress address) throws IOException {
     ChannelFuture cf = bootstrap.connect(address);
     if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
       throw new IOException(
-        String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
+              String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
     } else if (cf.cause() != null) {
       throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
     }
@@ -290,9 +279,7 @@ public class TransportClientFactory implements Closeable {
     });
   }
 
-  /**
-   * Close all connections in the connection pool, and shutdown the worker thread pool.
-   */
+  /** Close all connections in the connection pool, and shutdown the worker thread pool. */
   @Override
   public void close() {
     // Go through all clients and close them if they are active.

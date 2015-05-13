@@ -58,29 +58,22 @@ public class TransportServer implements Closeable {
   private ChannelFuture channelFuture;
   private int port = -1;
 
-  /**
-   * Creates a TransportServer that binds to the given port, or to any available if 0.
-   */
+  /** Creates a TransportServer that binds to the given port, or to any available if 0. */
   public TransportServer(
       TransportContext context,
       int portToBind,
       RpcHandler appRpcHandler,
-      TransportEncryptionHandler encryptionHandler,
       List<TransportServerBootstrap> bootstraps) {
     this.context = context;
     this.conf = context.getConf();
     this.appRpcHandler = appRpcHandler;
     this.bootstraps = Lists.newArrayList(Preconditions.checkNotNull(bootstraps));
+
     this.encryptionHandler =
-      (encryptionHandler != null ? encryptionHandler : new NoEncryptionHandler());
+            (encryptionHandler != null ? encryptionHandler : new NoEncryptionHandler());
     init(portToBind);
   }
 
-  /**
-   * Returns the port this TransportServer will attempt to bind to.
-   *
-   * @return
-   */
   public int getPort() {
     if (port == -1) {
       throw new IllegalStateException("Server not initialized");
@@ -88,12 +81,8 @@ public class TransportServer implements Closeable {
     return port;
   }
 
-  /**
-   * Initializes this TransportServer.
-   *
-   * @param portToBind
-   */
   private void init(int portToBind) {
+
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     EventLoopGroup bossGroup =
       NettyUtils.createEventLoop(ioMode, conf.serverThreads(), "shuffle-server");
@@ -143,8 +132,6 @@ public class TransportServer implements Closeable {
       }
     });
   }
-
-
 
   @Override
   public void close() {

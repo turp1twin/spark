@@ -22,7 +22,7 @@ from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
 
-__all__ = ['Estimator', 'Transformer', 'Pipeline', 'PipelineModel']
+__all__ = ['Estimator', 'Transformer', 'Pipeline', 'PipelineModel', 'Evaluator']
 
 
 @inherit_doc
@@ -124,15 +124,15 @@ class Pipeline(Estimator):
         Sets params for Pipeline.
         """
         kwargs = self.setParams._input_kwargs
-        return self._set_params(**kwargs)
+        return self._set(**kwargs)
 
     def fit(self, dataset, params={}):
-        paramMap = self._merge_params(params)
+        paramMap = self.extractParamMap(params)
         stages = paramMap[self.stages]
         for stage in stages:
             if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
-                raise ValueError(
-                    "Cannot recognize a pipeline stage of type %s." % type(stage).__name__)
+                raise TypeError(
+                    "Cannot recognize a pipeline stage of type %s." % type(stage))
         indexOfLastEstimator = -1
         for i, stage in enumerate(stages):
             if isinstance(stage, Estimator):
@@ -164,7 +164,28 @@ class PipelineModel(Transformer):
         self.transformers = transformers
 
     def transform(self, dataset, params={}):
-        paramMap = self._merge_params(params)
+        paramMap = self.extractParamMap(params)
         for t in self.transformers:
             dataset = t.transform(dataset, paramMap)
         return dataset
+
+
+class Evaluator(object):
+    """
+    Base class for evaluators that compute metrics from predictions.
+    """
+
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def evaluate(self, dataset, params={}):
+        """
+        Evaluates the output.
+
+        :param dataset: a dataset that contains labels/observations and
+                        predictions
+        :param params: an optional param map that overrides embedded
+                       params
+        :return: metric
+        """
+        raise NotImplementedError()

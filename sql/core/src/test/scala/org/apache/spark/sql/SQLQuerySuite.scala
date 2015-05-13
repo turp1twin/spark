@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.TestSQLContext
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.GeneratedAggregate
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types._
-
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext.{udf => _, _}
 
+import org.apache.spark.sql.types._
+
+/** A SQL Dialect for testing purpose, and it can not be nested type */
+class MyDialect extends DefaultDialect
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
@@ -50,6 +51,16 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
   }
 
+  test("support table.star") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.*
+          |FROM testData l join testData2 r on (l.key = r.a)
+        """.stripMargin),
+      Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+  }
+
   test("self join with alias in agg") {
       Seq(1,2,3)
         .map(i => (i, i.toString))
@@ -66,6 +77,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
           |GROUP BY x.str
         """.stripMargin),
       Row("1", 1) :: Row("2", 1) :: Row("3", 1) :: Nil)
+  }
+
+  test("SQL Dialect Switching to a new SQL parser") {
+    val newContext = new SQLContext(TestSQLContext.sparkContext)
+    newContext.setConf("spark.sql.dialect", classOf[MyDialect].getCanonicalName())
+    assert(newContext.getSQLDialect().getClass === classOf[MyDialect])
+    assert(newContext.sql("SELECT 1").collect() === Array(Row(1)))
+  }
+
+  test("SQL Dialect Switch to an invalid parser with alias") {
+    val newContext = new SQLContext(TestSQLContext.sparkContext)
+    newContext.sql("SET spark.sql.dialect=MyTestClass")
+    intercept[DialectException] {
+      newContext.sql("SELECT 1")
+    }
+    // test if the dialect set back to DefaultSQLDialect
+    assert(newContext.getSQLDialect().getClass === classOf[DefaultDialect])
   }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
@@ -151,10 +179,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       "SELECT count(distinct key) FROM testData3x",
       Row(100) :: Nil)
     // SUM
-     testCodeGen(
-       "SELECT value, sum(key) FROM testData3x GROUP BY value",
-       (1 to 100).map(i => Row(i.toString, 3 * i)))
-     testCodeGen(
+    testCodeGen(
+      "SELECT value, sum(key) FROM testData3x GROUP BY value",
+      (1 to 100).map(i => Row(i.toString, 3 * i)))
+    testCodeGen(
       "SELECT sum(key), SUM(CAST(key as Double)) FROM testData3x",      
       Row(5050 * 3, 5050 * 3.0) :: Nil)
     // AVERAGE
@@ -171,6 +199,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     testCodeGen(
       "SELECT max(key) FROM testData3x",
       Row(100) :: Nil)
+    // MIN
+    testCodeGen(
+      "SELECT value, min(key) FROM testData3x GROUP BY value",
+      (1 to 100).map(i => Row(i.toString, i)))
+    testCodeGen(
+      "SELECT min(key) FROM testData3x",
+      Row(1) :: Nil)
     // Some combinations.
     testCodeGen(
       """
@@ -178,24 +213,26 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
         |  value,
         |  sum(key),
         |  max(key),
+        |  min(key),
         |  avg(key),
         |  count(key),
         |  count(distinct key)
         |FROM testData3x
         |GROUP BY value
       """.stripMargin,
-      (1 to 100).map(i => Row(i.toString, i*3, i, i, 3, 1)))
+      (1 to 100).map(i => Row(i.toString, i*3, i, i, i, 3, 1)))
     testCodeGen(
-      "SELECT max(key), avg(key), count(key), count(distinct key) FROM testData3x",
-      Row(100, 50.5, 300, 100) :: Nil)
+      "SELECT max(key), min(key), avg(key), count(key), count(distinct key) FROM testData3x",
+      Row(100, 1, 50.5, 300, 100) :: Nil)
     // Aggregate with Code generation handling all null values
     testCodeGen(
       "SELECT  sum('a'), avg('a'), count(null) FROM testData",
       Row(0, null, 0) :: Nil)
-      
+
     dropTempTable("testData3x")
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
+
   test("Add Parser of SQL COALESCE()") {
     checkAnswer(
       sql("""SELECT COALESCE(1, 2)"""),
@@ -393,6 +430,26 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     setConf(SQLConf.EXTERNAL_SORT, before.toString)
   }
 
+  test("SPARK-6927 sorting with codegen on") {
+    val externalbefore = conf.externalSortEnabled
+    val codegenbefore = conf.codegenEnabled
+    setConf(SQLConf.EXTERNAL_SORT, "false")
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, externalbefore.toString)
+    setConf(SQLConf.CODEGEN_ENABLED, codegenbefore.toString)
+  }
+
+  test("SPARK-6927 external sorting with codegen on") {
+    val externalbefore = conf.externalSortEnabled
+    val codegenbefore = conf.codegenEnabled
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    setConf(SQLConf.EXTERNAL_SORT, "true")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, externalbefore.toString)
+    setConf(SQLConf.CODEGEN_ENABLED, codegenbefore.toString)
+  }
+
   test("limit") {
     checkAnswer(
       sql("SELECT * FROM testData LIMIT 10"),
@@ -405,6 +462,26 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).map(Row.fromTuple).toSeq)
+  }
+
+  test("CTE feature") {
+    checkAnswer(
+      sql("with q1 as (select * from testData limit 10) select * from q1"),
+      testData.take(10).toSeq)
+
+    checkAnswer(
+      sql("""
+        |with q1 as (select * from testData where key= '5'),
+        |q2 as (select * from testData where key = '4')
+        |select * from q1 union all select * from q2""".stripMargin),
+      Row(5, "5") :: Row(4, "4") :: Nil)
+
+  }
+
+  test("Allow only a single WITH clause per query") {
+    intercept[RuntimeException] {
+      sql("with q1 as (select * from testData) with q2 as (select * from q1) select * from q2")
+    }
   }
 
   test("date row") {
@@ -1099,7 +1176,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val data = sparkContext.parallelize(
       Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
     jsonRDD(data).registerTempTable("records")
-    sql("SELECT `key?number1` FROM records")
+    sql("SELECT `key?number1`, `key.number2` FROM records")
   }
 
   test("SPARK-3814 Support Bitwise & operator") {
@@ -1198,5 +1275,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       """{"a": {"b": [1]}, "b": [{"a": 1}], "c0": {"a": 1}}""" :: Nil)).registerTempTable("t")
     checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY c0.a"), Row(1))
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY c0.a"), Row(1))
+  }
+
+  test("SPARK-6898: complete support for special chars in column names") {
+    jsonRDD(sparkContext.makeRDD(
+      """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
+      .registerTempTable("t")
+
+    checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
 }

@@ -47,10 +47,10 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
   }
 
   public SaslClientBootstrap(
-    TransportConf conf,
-    String appId,
-    SecretKeyHolder secretKeyHolder,
-    boolean encrypt) {
+      TransportConf conf,
+      String appId,
+      SecretKeyHolder secretKeyHolder,
+      boolean encrypt) {
     this.conf = conf;
     this.appId = appId;
     this.secretKeyHolder = secretKeyHolder;
@@ -97,4 +97,5 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
       }
     }
   }
+
 }

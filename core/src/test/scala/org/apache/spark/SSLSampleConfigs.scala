@@ -23,10 +23,11 @@ object SSLSampleConfigs {
   val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
   val privateKeyPath = new File(this.getClass.getResource("/key.pem").toURI).getAbsolutePath
   val certChainPath = new File(this.getClass.getResource("/certchain.pem").toURI).getAbsolutePath
-  val untrustedKeyStorePath = new File(this.getClass.getResource("/untrusted-keystore").toURI).getAbsolutePath
+  val untrustedKeyStorePath = new File(
+    this.getClass.getResource("/untrusted-keystore").toURI).getAbsolutePath
   val trustStorePath = new File(this.getClass.getResource("/truststore").toURI).getAbsolutePath
 
-  def sparkSSLConfig() = {
+  def sparkSSLConfig(): SparkConf = {
     val conf = new SparkConf(loadDefaults = false)
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", keyStorePath)
@@ -45,7 +46,7 @@ object SSLSampleConfigs {
     conf
   }
 
-  def sparkSSLConfigUntrusted() = {
+  def sparkSSLConfigUntrusted(): SparkConf = {
     val conf = new SparkConf(loadDefaults = false)
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", untrustedKeyStorePath)

@@ -22,7 +22,6 @@ import java.util.List;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,36 +59,28 @@ public class ExternalShuffleClient extends ShuffleClient {
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
    * then secretKeyHolder may be null.
-   * @param conf
-   * @param secretKeyHolder
-   * @param saslEnabled
    */
   public ExternalShuffleClient(
-      TransportConf conf,
-      SecretKeyHolder secretKeyHolder,
-      boolean saslEnabled,
-      boolean saslEncryptionEnabled) {
+          TransportConf conf,
+          SecretKeyHolder secretKeyHolder,
+          boolean saslEnabled,
+          boolean saslEncryptionEnabled) {
     this(conf, secretKeyHolder, saslEnabled, saslEncryptionEnabled, new NoEncryptionHandler());
   }
 
   /**
-   * Creates an external shuffle client, with SASL optionally enabled, and an optional {@link TransportEncryptionHandler}.
-   * If SASL is not enabled then secretKeyHolder may be null.
-   * @param conf
-   * @param secretKeyHolder
-   * @param saslEnabled
-   * @param saslEncryptionEnabled
-   * @param encryptionHandler
+   * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
+   * then secretKeyHolder may be null.
    */
   public ExternalShuffleClient(
-      TransportConf conf,
-      SecretKeyHolder secretKeyHolder,
-      boolean saslEnabled,
-      boolean saslEncryptionEnabled,
-      TransportEncryptionHandler encryptionHandler) {
+          TransportConf conf,
+          SecretKeyHolder secretKeyHolder,
+          boolean saslEnabled,
+          boolean saslEncryptionEnabled,
+          TransportEncryptionHandler encryptionHandler) {
     Preconditions.checkArgument(
-      !saslEncryptionEnabled || saslEnabled,
-      "SASL encryption can only be enabled if SASL is also enabled.");
+            !saslEncryptionEnabled || saslEnabled,
+            "SASL encryption can only be enabled if SASL is also enabled.");
     this.conf = conf;
     this.secretKeyHolder = secretKeyHolder;
     this.saslEnabled = saslEnabled;
