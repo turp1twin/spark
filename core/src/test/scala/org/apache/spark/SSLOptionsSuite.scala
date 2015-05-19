@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.io.File
 
-import com.google.common.io.Files
-import org.apache.spark.util.Utils
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 class SSLOptionsSuite extends FunSuite with BeforeAndAfterAll {
@@ -28,16 +26,23 @@ class SSLOptionsSuite extends FunSuite with BeforeAndAfterAll {
   test("test resolving property file as spark conf ") {
     val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
     val trustStorePath = new File(this.getClass.getResource("/truststore").toURI).getAbsolutePath
+    val privateKeyPath = new File(this.getClass.getResource("/key.pem").toURI).getAbsolutePath
+    val certChainPath = new File(this.getClass.getResource("/certchain.pem").toURI).getAbsolutePath
 
     val conf = new SparkConf
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", keyStorePath)
     conf.set("spark.ssl.keyStorePassword", "password")
     conf.set("spark.ssl.keyPassword", "password")
+    conf.set("spark.ssl.privateKey", privateKeyPath)
+    conf.set("spark.ssl.certChain", certChainPath)
     conf.set("spark.ssl.trustStore", trustStorePath)
     conf.set("spark.ssl.trustStorePassword", "password")
     conf.set("spark.ssl.enabledAlgorithms",
       "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
+    conf.set("spark.ssl.trustStoreReloadingEnabled", "false")
+    conf.set("spark.ssl.trustStoreReloadInterval", "10000")
+    conf.set("spark.ssl.openSslEnabled", "false")
     conf.set("spark.ssl.protocol", "SSLv3")
 
     val opts = SSLOptions.parse(conf, "spark.ssl")
@@ -46,10 +51,19 @@ class SSLOptionsSuite extends FunSuite with BeforeAndAfterAll {
     assert(opts.trustStore.isDefined === true)
     assert(opts.trustStore.get.getName === "truststore")
     assert(opts.trustStore.get.getAbsolutePath === trustStorePath)
+    assert(opts.privateKey.isDefined === true)
+    assert(opts.privateKey.get.getName === "key.pem")
+    assert(opts.privateKey.get.getAbsolutePath === privateKeyPath)
+    assert(opts.certChain.isDefined === true)
+    assert(opts.certChain.get.getName === "certchain.pem")
+    assert(opts.certChain.get.getAbsolutePath === certChainPath)
     assert(opts.keyStore.isDefined === true)
     assert(opts.keyStore.get.getName === "keystore")
     assert(opts.keyStore.get.getAbsolutePath === keyStorePath)
     assert(opts.trustStorePassword === Some("password"))
+    assert(opts.trustStoreReloadingEnabled === false)
+    assert(opts.trustStoreReloadInterval === 10000)
+    assert(opts.openSslEnabled === false)
     assert(opts.keyStorePassword === Some("password"))
     assert(opts.keyPassword === Some("password"))
     assert(opts.protocol === Some("SSLv3"))
@@ -60,14 +74,21 @@ class SSLOptionsSuite extends FunSuite with BeforeAndAfterAll {
   test("test resolving property with defaults specified ") {
     val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
     val trustStorePath = new File(this.getClass.getResource("/truststore").toURI).getAbsolutePath
+    val privateKeyPath = new File(this.getClass.getResource("/key.pem").toURI).getAbsolutePath
+    val certChainPath = new File(this.getClass.getResource("/certchain.pem").toURI).getAbsolutePath
 
     val conf = new SparkConf
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", keyStorePath)
     conf.set("spark.ssl.keyStorePassword", "password")
     conf.set("spark.ssl.keyPassword", "password")
+    conf.set("spark.ssl.privateKey", privateKeyPath)
+    conf.set("spark.ssl.certChain", certChainPath)
     conf.set("spark.ssl.trustStore", trustStorePath)
     conf.set("spark.ssl.trustStorePassword", "password")
+    conf.set("spark.ssl.trustStoreReloadingEnabled", "false")
+    conf.set("spark.ssl.trustStoreReloadInterval", "10000")
+    conf.set("spark.ssl.openSslEnabled", "false")
     conf.set("spark.ssl.enabledAlgorithms",
       "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
     conf.set("spark.ssl.protocol", "SSLv3")
@@ -79,12 +100,21 @@ class SSLOptionsSuite extends FunSuite with BeforeAndAfterAll {
     assert(opts.trustStore.isDefined === true)
     assert(opts.trustStore.get.getName === "truststore")
     assert(opts.trustStore.get.getAbsolutePath === trustStorePath)
+    assert(opts.privateKey.isDefined === true)
+    assert(opts.privateKey.get.getName === "key.pem")
+    assert(opts.privateKey.get.getAbsolutePath === privateKeyPath)
+    assert(opts.certChain.isDefined === true)
+    assert(opts.certChain.get.getName === "certchain.pem")
+    assert(opts.certChain.get.getAbsolutePath === certChainPath)
     assert(opts.keyStore.isDefined === true)
     assert(opts.keyStore.get.getName === "keystore")
     assert(opts.keyStore.get.getAbsolutePath === keyStorePath)
     assert(opts.trustStorePassword === Some("password"))
     assert(opts.keyStorePassword === Some("password"))
     assert(opts.keyPassword === Some("password"))
+    assert(opts.trustStoreReloadingEnabled === false)
+    assert(opts.trustStoreReloadInterval === 10000)
+    assert(opts.openSslEnabled === false)
     assert(opts.protocol === Some("SSLv3"))
     assert(opts.enabledAlgorithms ===
       Set("TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA"))
@@ -93,6 +123,8 @@ class SSLOptionsSuite extends FunSuite with BeforeAndAfterAll {
   test("test whether defaults can be overridden ") {
     val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
     val trustStorePath = new File(this.getClass.getResource("/truststore").toURI).getAbsolutePath
+    val privateKeyPath = new File(this.getClass.getResource("/key.pem").toURI).getAbsolutePath
+    val certChainPath = new File(this.getClass.getResource("/certchain.pem").toURI).getAbsolutePath
 
     val conf = new SparkConf
     conf.set("spark.ssl.enabled", "true")
@@ -101,8 +133,13 @@ class SSLOptionsSuite extends FunSuite with BeforeAndAfterAll {
     conf.set("spark.ssl.keyStorePassword", "password")
     conf.set("spark.ui.ssl.keyStorePassword", "12345")
     conf.set("spark.ssl.keyPassword", "password")
+    conf.set("spark.ssl.privateKey", privateKeyPath)
+    conf.set("spark.ssl.certChain", certChainPath)
     conf.set("spark.ssl.trustStore", trustStorePath)
     conf.set("spark.ssl.trustStorePassword", "password")
+    conf.set("spark.ui.ssl.trustStoreReloadingEnabled", "true")
+    conf.set("spark.ui.ssl.trustStoreReloadInterval", "20000")
+    conf.set("spark.ui.ssl.openSslEnabled", "true")
     conf.set("spark.ssl.enabledAlgorithms",
       "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
     conf.set("spark.ui.ssl.enabledAlgorithms", "ABC, DEF")
@@ -115,12 +152,21 @@ class SSLOptionsSuite extends FunSuite with BeforeAndAfterAll {
     assert(opts.trustStore.isDefined === true)
     assert(opts.trustStore.get.getName === "truststore")
     assert(opts.trustStore.get.getAbsolutePath === trustStorePath)
+    assert(opts.privateKey.isDefined === true)
+    assert(opts.privateKey.get.getName === "key.pem")
+    assert(opts.privateKey.get.getAbsolutePath === privateKeyPath)
+    assert(opts.certChain.isDefined === true)
+    assert(opts.certChain.get.getName === "certchain.pem")
+    assert(opts.certChain.get.getAbsolutePath === certChainPath)
     assert(opts.keyStore.isDefined === true)
     assert(opts.keyStore.get.getName === "keystore")
     assert(opts.keyStore.get.getAbsolutePath === keyStorePath)
     assert(opts.trustStorePassword === Some("password"))
     assert(opts.keyStorePassword === Some("12345"))
     assert(opts.keyPassword === Some("password"))
+    assert(opts.trustStoreReloadingEnabled === true)
+    assert(opts.trustStoreReloadInterval === 20000)
+    assert(opts.openSslEnabled === true)
     assert(opts.protocol === Some("SSLv3"))
     assert(opts.enabledAlgorithms === Set("ABC", "DEF"))
   }

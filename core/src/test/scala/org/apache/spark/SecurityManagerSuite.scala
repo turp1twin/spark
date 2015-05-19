@@ -147,7 +147,7 @@ class SecurityManagerSuite extends FunSuite {
     assert(securityManager.fileServerSSLOptions.keyPassword === Some("password"))
     assert(securityManager.fileServerSSLOptions.protocol === Some("TLSv1"))
     assert(securityManager.fileServerSSLOptions.enabledAlgorithms ===
-        Set("TLS_RSA_WITH_AES_128_CBC_SHA", "SSL_RSA_WITH_DES_CBC_SHA"))
+      Set("TLS_RSA_WITH_AES_128_CBC_SHA", "SSL_RSA_WITH_DES_CBC_SHA"))
 
     assert(securityManager.akkaSSLOptions.trustStore.isDefined === true)
     assert(securityManager.akkaSSLOptions.trustStore.get.getName === "truststore")
@@ -158,7 +158,18 @@ class SecurityManagerSuite extends FunSuite {
     assert(securityManager.akkaSSLOptions.keyPassword === Some("password"))
     assert(securityManager.akkaSSLOptions.protocol === Some("TLSv1"))
     assert(securityManager.akkaSSLOptions.enabledAlgorithms ===
-        Set("TLS_RSA_WITH_AES_128_CBC_SHA", "SSL_RSA_WITH_DES_CBC_SHA"))
+      Set("TLS_RSA_WITH_AES_128_CBC_SHA", "SSL_RSA_WITH_DES_CBC_SHA"))
+
+    assert(securityManager.btsSSLOptions.trustStore.isDefined === true)
+    assert(securityManager.btsSSLOptions.trustStore.get.getName === "truststore")
+    assert(securityManager.btsSSLOptions.keyStore.isDefined === true)
+    assert(securityManager.btsSSLOptions.keyStore.get.getName === "keystore")
+    assert(securityManager.btsSSLOptions.trustStorePassword === Some("password"))
+    assert(securityManager.btsSSLOptions.keyStorePassword === Some("password"))
+    assert(securityManager.btsSSLOptions.keyPassword === Some("password"))
+    assert(securityManager.btsSSLOptions.protocol === Some("TLSv1"))
+    assert(securityManager.btsSSLOptions.enabledAlgorithms ===
+      Set("TLS_RSA_WITH_AES_128_CBC_SHA", "SSL_RSA_WITH_DES_CBC_SHA"))
   }
 
   test("ssl off setup") {
@@ -171,6 +182,7 @@ class SecurityManagerSuite extends FunSuite {
 
     assert(securityManager.fileServerSSLOptions.enabled === false)
     assert(securityManager.akkaSSLOptions.enabled === false)
+    assert(securityManager.btsSSLOptions.enabled === false)
     assert(securityManager.sslSocketFactory.isDefined === false)
     assert(securityManager.hostnameVerifier.isDefined === false)
   }
