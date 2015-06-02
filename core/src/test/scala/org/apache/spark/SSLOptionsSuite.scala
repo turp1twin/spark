@@ -19,9 +19,11 @@ package org.apache.spark
 
 import java.io.File
 
+import com.google.common.io.Files
+import org.apache.spark.util.Utils
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-class SSLOptionsSuite extends FunSuite with BeforeAndAfterAll {
+class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("test resolving property file as spark conf ") {
     val keyStorePath = new File(this.getClass.getResource("/keystore").toURI).getAbsolutePath
