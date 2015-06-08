@@ -22,7 +22,7 @@ import java.io.File
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 
 import org.apache.spark.network.util.ssl.SSLFactory
-import org.apache.spark.network.util.{SystemPropertyConfigProvider, ConfigProvider}
+import org.apache.spark.network.util.ConfigProvider
 
 import org.eclipse.jetty.util.ssl.SslContextFactory
 

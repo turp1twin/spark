@@ -19,9 +19,7 @@ package org.apache.spark
 
 import java.io.File
 
-import com.google.common.io.Files
-import org.apache.spark.util.Utils
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.BeforeAndAfterAll
 
 class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
@@ -53,6 +51,9 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(opts.trustStore.isDefined === true)
     assert(opts.trustStore.get.getName === "truststore")
     assert(opts.trustStore.get.getAbsolutePath === trustStorePath)
+    assert(opts.trustStorePassword === Some("password"))
+    assert(opts.trustStoreReloadingEnabled === false)
+    assert(opts.trustStoreReloadInterval === 10000)
     assert(opts.privateKey.isDefined === true)
     assert(opts.privateKey.get.getName === "key.pem")
     assert(opts.privateKey.get.getAbsolutePath === privateKeyPath)
@@ -62,12 +63,9 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(opts.keyStore.isDefined === true)
     assert(opts.keyStore.get.getName === "keystore")
     assert(opts.keyStore.get.getAbsolutePath === keyStorePath)
-    assert(opts.trustStorePassword === Some("password"))
-    assert(opts.trustStoreReloadingEnabled === false)
-    assert(opts.trustStoreReloadInterval === 10000)
-    assert(opts.openSslEnabled === false)
     assert(opts.keyStorePassword === Some("password"))
     assert(opts.keyPassword === Some("password"))
+    assert(opts.openSslEnabled === false)
     assert(opts.protocol === Some("SSLv3"))
     assert(opts.enabledAlgorithms ===
       Set("TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA"))
@@ -111,9 +109,9 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(opts.keyStore.isDefined === true)
     assert(opts.keyStore.get.getName === "keystore")
     assert(opts.keyStore.get.getAbsolutePath === keyStorePath)
-    assert(opts.trustStorePassword === Some("password"))
     assert(opts.keyStorePassword === Some("password"))
     assert(opts.keyPassword === Some("password"))
+    assert(opts.trustStorePassword === Some("password"))
     assert(opts.trustStoreReloadingEnabled === false)
     assert(opts.trustStoreReloadInterval === 10000)
     assert(opts.openSslEnabled === false)
