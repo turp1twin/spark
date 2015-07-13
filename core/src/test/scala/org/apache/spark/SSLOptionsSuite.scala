@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import javax.net.ssl.SSLContext
 
 import org.scalatest.BeforeAndAfterAll
 
@@ -29,6 +30,15 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val privateKeyPath = new File(this.getClass.getResource("/key.pem").toURI).getAbsolutePath
     val certChainPath = new File(this.getClass.getResource("/certchain.pem").toURI).getAbsolutePath
 
+    // Pick two cipher suites that the provider knows about
+    val sslContext = SSLContext.getInstance("TLSv1.2")
+    sslContext.init(null, null, null)
+    val algorithms = sslContext
+      .getServerSocketFactory
+      .getDefaultCipherSuites
+      .take(2)
+      .toSet
+
     val conf = new SparkConf
     conf.set("spark.ssl.enabled", "true")
     conf.set("spark.ssl.keyStore", keyStorePath)
@@ -38,12 +48,11 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     conf.set("spark.ssl.certChain", certChainPath)
     conf.set("spark.ssl.trustStore", trustStorePath)
     conf.set("spark.ssl.trustStorePassword", "password")
-    conf.set("spark.ssl.enabledAlgorithms",
-      "TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA")
     conf.set("spark.ssl.trustStoreReloadingEnabled", "false")
     conf.set("spark.ssl.trustStoreReloadInterval", "10000")
     conf.set("spark.ssl.openSslEnabled", "false")
-    conf.set("spark.ssl.protocol", "SSLv3")
+    conf.set("spark.ssl.enabledAlgorithms", algorithms.mkString(","))
+    conf.set("spark.ssl.protocol", "TLSv1.2")
 
     val opts = SSLOptions.parse(conf, "spark.ssl")
 
@@ -66,9 +75,8 @@ class SSLOptionsSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(opts.keyStorePassword === Some("password"))
     assert(opts.keyPassword === Some("password"))
     assert(opts.openSslEnabled === false)
-    assert(opts.protocol === Some("SSLv3"))
-    assert(opts.enabledAlgorithms ===
-      Set("TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_RSA_WITH_AES_256_CBC_SHA"))
+    assert(opts.protocol === Some("TLSv1.2"))
+    assert(opts.enabledAlgorithms === algorithms)
   }
 
   test("test resolving property with defaults specified ") {
