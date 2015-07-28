@@ -20,6 +20,7 @@ import com.google.common.io.Files;
 
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 
 import org.slf4j.Logger;
@@ -30,6 +31,7 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
@@ -96,7 +98,8 @@ public class SSLFactory {
    * @throws IOException
    * @throws GeneralSecurityException
    */
-  private void initJdkSslContext(final Builder b) throws IOException, GeneralSecurityException {
+  private void initJdkSslContext(final Builder b)
+    throws IOException, GeneralSecurityException {
     this.keyManagers = keyManagers(b.keyStore, b.keyStorePassword, b.keyPassword);
     this.trustManagers = trustStoreManagers(
       b.trustStore, b.trustStorePassword,
@@ -108,17 +111,20 @@ public class SSLFactory {
    * @param b
    * @throws SSLException
    */
-  private void initNettySslContexts(final Builder b) throws SSLException {
-    nettyClientSslContext = SslContext.newClientContext(b.certChain);
-    nettyServerSslContext = SslContext.newServerContext(
-      getSslProvider(b),
-      b.certChain,
-      b.privateKey,
-      b.keyPassword,
-      (b.requestedCiphers != null ? Arrays.asList(b.requestedCiphers) : null),
-      null,
-      0,
-      0);
+  private void initNettySslContexts(final Builder b)
+    throws SSLException, NoSuchAlgorithmException {
+    nettyClientSslContext = SslContextBuilder
+      .forClient()
+      .trustManager(b.certChain)
+      .build();
+
+    nettyServerSslContext = SslContextBuilder
+      .forServer(b.certChain, b.privateKey, b.keyPassword)
+      .sslProvider(getSslProvider(b))
+      .ciphers(Arrays.asList(enabledCipherSuites(b.requestedCiphers, b.requestedProtocol)))
+      .sessionCacheSize(0)
+      .sessionTimeout(0)
+      .build();
   }
 
   /**
@@ -184,7 +190,7 @@ public class SSLFactory {
      * @return
      */
     public Builder requestedProtocol(String requestedProtocol) {
-      this.requestedProtocol = requestedProtocol == null ? "Default" : requestedProtocol;
+      this.requestedProtocol = requestedProtocol == null ? "TLSv1.2" : requestedProtocol;
       return this;
     }
 
@@ -299,9 +305,27 @@ public class SSLFactory {
     KeyManager[] keyManagers,
     TrustManager[] trustManagers)
     throws IOException, GeneralSecurityException {
-    SSLContext sslContext = SSLContext.getInstance(requestedProtocol);
+    SSLContext sslContext = getSSLContextInstance(requestedProtocol);
     sslContext.init(keyManagers, trustManagers, null);
     return sslContext;
+  }
+
+  /**
+   * Get the {@link SSLContext} for the specified <tt>requestedProtocol</tt>
+   * if available, or the default {@linnk SSLContext}
+   * @param requestedProtocol
+   * @return
+   * @throws NoSuchAlgorithmException
+   */
+  private static SSLContext getSSLContextInstance(String requestedProtocol)
+    throws NoSuchAlgorithmException {
+    SSLContext context = null;
+    try {
+      context = SSLContext.getInstance(requestedProtocol);
+    } catch (Exception e) {
+      context = SSLContext.getDefault();
+    }
+    return context;
   }
 
   /**
@@ -488,13 +512,15 @@ public class SSLFactory {
   }
 
   /**
-   * @param engine
+   *
+   * @param supportedCiphers
+   * @param defaultCiphers
    * @param requestedCiphers
    * @return
    */
-  private static String[] enabledCipherSuites(SSLEngine engine, String[] requestedCiphers) {
-    String[] supportedCiphers = engine.getSupportedCipherSuites();
-    String[] defaultCiphers = new String[]{
+  private static String[] enabledCipherSuites(
+    String[] supportedCiphers, String[] defaultCiphers, String[] requestedCiphers) {
+    String[] baseCiphers = new String[]{
       // GCM (Galois/Counter Mode) requires JDK 8.
       "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
       "TLS_ECDHE_RSA_WITH_RC4_128_SHA",
@@ -510,7 +536,7 @@ public class SSLFactory {
       "TLS_RSA_WITH_AES_256_CBC_SHA",
       "SSL_RSA_WITH_DES_CBC_SHA"};
     String[] enabledCiphers =
-      ((requestedCiphers == null || requestedCiphers.length == 0) ? defaultCiphers : requestedCiphers);
+      ((requestedCiphers == null || requestedCiphers.length == 0) ? baseCiphers : requestedCiphers);
     List<String> ciphers = new ArrayList<String>();
 
     addIfSupported(supportedCiphers, ciphers, enabledCiphers);
@@ -518,8 +544,39 @@ public class SSLFactory {
       return ciphers.toArray(new String[ciphers.size()]);
     } else {
       // Use the default from JDK as fallback.
-      return engine.getEnabledCipherSuites();
+      return defaultCiphers;
     }
+  }
+
+  /**
+   * @param engine
+   * @param requestedCiphers
+   * @return
+   */
+  private static String[] enabledCipherSuites(SSLEngine engine, String[] requestedCiphers) {
+    return enabledCipherSuites(
+      engine.getSupportedCipherSuites(), engine.getEnabledCipherSuites(), requestedCiphers);
+  }
+
+  /**
+   *
+   * @param requestedCiphers
+   * @param requestedProtocol
+   * @return
+   * @throws NoSuchAlgorithmException
+   */
+  private static String[] enabledCipherSuites(String[] requestedCiphers, String requestedProtocol)
+    throws NoSuchAlgorithmException {
+    SSLContext context = null;
+    try {
+      context = SSLContext.getInstance(requestedProtocol);
+      context.init(null, null, null);
+    } catch (Exception e) {
+      context = SSLContext.getDefault();
+    }
+    SSLServerSocketFactory factory = context.getServerSocketFactory();
+    return enabledCipherSuites(
+      factory.getSupportedCipherSuites(), factory.getDefaultCipherSuites(), requestedCiphers);
   }
 
   /**

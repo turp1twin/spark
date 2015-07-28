@@ -174,7 +174,7 @@ class SecurityManagerSuite extends SparkFunSuite {
     assert(securityManager.btsSSLOptions.trustStorePassword === Some("password"))
     assert(securityManager.btsSSLOptions.keyStorePassword === Some("password"))
     assert(securityManager.btsSSLOptions.keyPassword === Some("password"))
-    assert(securityManager.btsSSLOptions.protocol === Some("TLSv1"))
+    assert(securityManager.btsSSLOptions.protocol === Some("TLSv1.2"))
     assert(securityManager.btsSSLOptions.enabledAlgorithms === expectedAlgorithms)
   }
 

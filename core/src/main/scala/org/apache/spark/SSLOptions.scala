@@ -17,9 +17,9 @@
 
 package org.apache.spark
 
-import java.io.{File, FileInputStream}
-import java.security.{KeyStore, NoSuchAlgorithmException}
-import javax.net.ssl.{KeyManager, KeyManagerFactory, SSLContext, TrustManager, TrustManagerFactory}
+import java.io.File
+import java.security.NoSuchAlgorithmException
+import javax.net.ssl.SSLContext
 
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 
@@ -78,7 +78,6 @@ private[spark] case class SSLOptions(
   def createJettySslContextFactory(): Option[SslContextFactory] = {
     if (enabled) {
       val sslContextFactory = new SslContextFactory()
-
       keyStore.foreach(file => sslContextFactory.setKeyStorePath(file.getAbsolutePath))
       trustStore.foreach(file => sslContextFactory.setTrustStore(file.getAbsolutePath))
       keyStorePassword.foreach(sslContextFactory.setKeyStorePassword)
@@ -86,7 +85,6 @@ private[spark] case class SSLOptions(
       keyPassword.foreach(sslContextFactory.setKeyManagerPassword)
       protocol.foreach(sslContextFactory.setProtocol)
       sslContextFactory.setIncludeCipherSuites(supportedAlgorithms.toSeq: _*)
-
       Some(sslContextFactory)
     } else {
       None
