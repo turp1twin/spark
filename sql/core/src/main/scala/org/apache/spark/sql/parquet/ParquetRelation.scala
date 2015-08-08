@@ -39,11 +39,10 @@ import org.apache.parquet.{Log => ParquetLog}
 
 import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{SqlNewHadoopPartition, SqlNewHadoopRDD, RDD}
 import org.apache.spark.rdd.RDD._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.{SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql.execution.datasources.PartitionSpec
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -63,7 +62,7 @@ private[sql] class DefaultSource extends HadoopFsRelationProvider {
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
 private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext)
-  extends OutputWriterInternal {
+  extends OutputWriter {
 
   private val recordWriter: RecordWriter[Void, InternalRow] = {
     val outputFormat = {
@@ -88,7 +87,9 @@ private[sql] class ParquetOutputWriter(path: String, context: TaskAttemptContext
     outputFormat.getRecordWriter(context)
   }
 
-  override def writeInternal(row: InternalRow): Unit = recordWriter.write(null, row)
+  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
+
+  override protected[sql] def writeInternal(row: InternalRow): Unit = recordWriter.write(null, row)
 
   override def close(): Unit = recordWriter.close(context)
 }
@@ -124,6 +125,9 @@ private[sql] class ParquetRelation(
       .get(ParquetRelation.MERGE_SCHEMA)
       .map(_.toBoolean)
       .getOrElse(sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
+
+  private val mergeRespectSummaries =
+    sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
 
   private val maybeMetastoreSchema = parameters
     .get(ParquetRelation.METASTORE_SCHEMA)
@@ -289,7 +293,6 @@ private[sql] class ParquetRelation(
         initDriverSideJobFuncOpt = Some(setInputPaths),
         initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
         inputFormatClass = classOf[ParquetInputFormat[InternalRow]],
-        keyClass = classOf[Void],
         valueClass = classOf[InternalRow]) {
 
         val cacheMetadata = useMetadataCache
@@ -326,7 +329,7 @@ private[sql] class ParquetRelation(
             new SqlNewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
           }
         }
-      }.values.asInstanceOf[RDD[Row]]  // type erasure hack to pass RDD[InternalRow] as RDD[Row]
+      }.asInstanceOf[RDD[Row]]  // type erasure hack to pass RDD[InternalRow] as RDD[Row]
     }
   }
 
@@ -422,7 +425,21 @@ private[sql] class ParquetRelation(
       val filesToTouch =
         if (shouldMergeSchemas) {
           // Also includes summary files, 'cause there might be empty partition directories.
-          (metadataStatuses ++ commonMetadataStatuses ++ dataStatuses).toSeq
+
+          // If mergeRespectSummaries config is true, we assume that all part-files are the same for
+          // their schema with summary files, so we ignore them when merging schema.
+          // If the config is disabled, which is the default setting, we merge all part-files.
+          // In this mode, we only need to merge schemas contained in all those summary files.
+          // You should enable this configuration only if you are very sure that for the parquet
+          // part-files to read there are corresponding summary files containing correct schema.
+
+          val needMerged: Seq[FileStatus] =
+            if (mergeRespectSummaries) {
+              Seq()
+            } else {
+              dataStatuses
+            }
+          (metadataStatuses ++ commonMetadataStatuses ++ needMerged).toSeq
         } else {
           // Tries any "_common_metadata" first. Parquet files written by old versions or Parquet
           // don't have this.

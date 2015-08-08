@@ -27,6 +27,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.SaslServerBootstrap
 import org.apache.spark.network.server.TransportServer
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.Utils
 
 /**
@@ -46,10 +47,15 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
 
   private val transportConf = SparkTransportConf.fromSparkConf(
     sparkConf, numUsableCores = 0, Some(securityManager.btsSSLOptions))
-  private val blockHandler = new ExternalShuffleBlockHandler(transportConf)
+  private val blockHandler = newShuffleBlockHandler(transportConf)
   private val transportContext: TransportContext = new TransportContext(transportConf, blockHandler)
 
   private var server: TransportServer = _
+
+  /** Create a new shuffle block handler. Factored out for subclasses to override. */
+  protected def newShuffleBlockHandler(conf: TransportConf): ExternalShuffleBlockHandler = {
+    new ExternalShuffleBlockHandler(conf)
+  }
 
   /** Starts the external shuffle service if the user has configured us to. */
   def startIfEnabled() {
@@ -71,6 +77,11 @@ class ExternalShuffleService(sparkConf: SparkConf, securityManager: SecurityMana
     server = transportContext.createServer(port, bootstraps)
   }
 
+  /** Clean up all shuffle files associated with an application that has exited. */
+  def applicationRemoved(appId: String): Unit = {
+    blockHandler.applicationRemoved(appId, true /* cleanupLocalDirs */)
+  }
+
   def stop() {
     if (server != null) {
       server.close()
@@ -89,6 +100,13 @@ object ExternalShuffleService extends Logging {
   private val barrier = new CountDownLatch(1)
 
   def main(args: Array[String]): Unit = {
+    main(args, (conf: SparkConf, sm: SecurityManager) => new ExternalShuffleService(conf, sm))
+  }
+
+  /** A helper main method that allows the caller to call this with a custom shuffle service. */
+  private[spark] def main(
+      args: Array[String],
+      newShuffleService: (SparkConf, SecurityManager) => ExternalShuffleService): Unit = {
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)
     val securityManager = new SecurityManager(sparkConf)
@@ -96,7 +114,7 @@ object ExternalShuffleService extends Logging {
     // we override this value since this service is started from the command line
     // and we assume the user really wants it to be running
     sparkConf.set("spark.shuffle.service.enabled", "true")
-    server = new ExternalShuffleService(sparkConf, securityManager)
+    server = newShuffleService(sparkConf, securityManager)
     server.start()
 
     installShutdownHook()
