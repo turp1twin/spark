@@ -21,10 +21,12 @@ import java.io.File
 import java.security.NoSuchAlgorithmException
 import javax.net.ssl.SSLContext
 
+import scala.collection.JavaConverters._
+
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 
-import org.apache.spark.network.util.ssl.SSLFactory
 import org.apache.spark.network.util.ConfigProvider
+import org.apache.spark.network.util.ssl.SSLFactory
 
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
@@ -78,6 +80,7 @@ private[spark] case class SSLOptions(
   def createJettySslContextFactory(): Option[SslContextFactory] = {
     if (enabled) {
       val sslContextFactory = new SslContextFactory()
+
       keyStore.foreach(file => sslContextFactory.setKeyStorePath(file.getAbsolutePath))
       trustStore.foreach(file => sslContextFactory.setTrustStore(file.getAbsolutePath))
       keyStorePassword.foreach(sslContextFactory.setKeyStorePassword)
@@ -85,6 +88,7 @@ private[spark] case class SSLOptions(
       keyPassword.foreach(sslContextFactory.setKeyManagerPassword)
       protocol.foreach(sslContextFactory.setProtocol)
       sslContextFactory.setIncludeCipherSuites(supportedAlgorithms.toSeq: _*)
+
       Some(sslContextFactory)
     } else {
       None
@@ -120,7 +124,6 @@ private[spark] case class SSLOptions(
    * object. It can be used then to compose the ultimate Akka configuration.
    */
   def createAkkaConfig: Option[Config] = {
-    import scala.collection.JavaConversions._
     if (enabled) {
       Some(ConfigFactory.empty()
         .withValue("akka.remote.netty.tcp.security.key-store",
@@ -138,7 +141,7 @@ private[spark] case class SSLOptions(
         .withValue("akka.remote.netty.tcp.security.protocol",
           ConfigValueFactory.fromAnyRef(protocol.getOrElse("")))
         .withValue("akka.remote.netty.tcp.security.enabled-algorithms",
-          ConfigValueFactory.fromIterable(supportedAlgorithms.toSeq))
+          ConfigValueFactory.fromIterable(supportedAlgorithms.asJava))
         .withValue("akka.remote.netty.tcp.enable-ssl",
           ConfigValueFactory.fromAnyRef(true)))
     } else {
@@ -282,25 +285,25 @@ private[spark] object SSLOptions extends Logging {
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
 
     val keyStore = conf.getOption(s"$ns.keyStore").map(new File(_))
-      .orElse(defaults.flatMap(_.keyStore))
+        .orElse(defaults.flatMap(_.keyStore))
 
     val keyStorePassword = conf.getOption(s"$ns.keyStorePassword")
-      .orElse(defaults.flatMap(_.keyStorePassword))
+        .orElse(defaults.flatMap(_.keyStorePassword))
 
     val privateKey = conf.getOption(s"$ns.privateKey").map(new File(_))
-      .orElse(defaults.flatMap(_.privateKey))
+        .orElse(defaults.flatMap(_.privateKey))
 
     val keyPassword = conf.getOption(s"$ns.keyPassword")
-      .orElse(defaults.flatMap(_.keyPassword))
+        .orElse(defaults.flatMap(_.keyPassword))
 
     val certChain = conf.getOption(s"$ns.certChain").map(new File(_))
-      .orElse(defaults.flatMap(_.certChain))
+        .orElse(defaults.flatMap(_.certChain))
 
     val trustStore = conf.getOption(s"$ns.trustStore").map(new File(_))
-      .orElse(defaults.flatMap(_.trustStore))
+        .orElse(defaults.flatMap(_.trustStore))
 
     val trustStorePassword = conf.getOption(s"$ns.trustStorePassword")
-      .orElse(defaults.flatMap(_.trustStorePassword))
+        .orElse(defaults.flatMap(_.trustStorePassword))
 
     val trustStoreReloadingEnabled = conf.getBoolean(s"$ns.trustStoreReloadingEnabled", false)
 
@@ -309,12 +312,12 @@ private[spark] object SSLOptions extends Logging {
     val openSslEnabled = conf.getBoolean(s"$ns.openSslEnabled", false)
 
     val protocol = conf.getOption(s"$ns.protocol")
-      .orElse(defaults.flatMap(_.protocol))
+        .orElse(defaults.flatMap(_.protocol))
 
     val enabledAlgorithms = conf.getOption(s"$ns.enabledAlgorithms")
-      .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSet)
-      .orElse(defaults.map(_.enabledAlgorithms))
-      .getOrElse(Set.empty)
+        .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSet)
+        .orElse(defaults.map(_.enabledAlgorithms))
+        .getOrElse(Set.empty)
 
     new SSLOptions(
       Some(ns),
