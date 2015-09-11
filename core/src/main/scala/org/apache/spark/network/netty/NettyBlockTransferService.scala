@@ -50,7 +50,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   private[this] var appId: String = _
 
   override def init(blockDataManager: BlockDataManager): Unit = {
-    val rpcHandler = new NettyBlockRpcServer(serializer, blockDataManager)
+    val rpcHandler = new NettyBlockRpcServer(conf.getAppId, serializer, blockDataManager)
     var serverBootstrap: Option[TransportServerBootstrap] = None
     var clientBootstrap: Option[TransportClientBootstrap] = None
     if (authEnabled) {
@@ -138,7 +138,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
       new RpcResponseCallback {
         override def onSuccess(response: Array[Byte]): Unit = {
           logTrace(s"Successfully uploaded block $blockId")
-          result.success()
+          result.success((): Unit)
         }
         override def onFailure(e: Throwable): Unit = {
           logError(s"Error while uploading block $blockId", e)
