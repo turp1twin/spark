@@ -26,8 +26,9 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
-__all__ = ['Binarizer', 'Bucketizer', 'DCT', 'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel',
-           'IndexToString', 'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel',
+__all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel', 'DCT',
+           'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel', 'IndexToString', 'MinMaxScaler',
+           'MinMaxScalerModel', 'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel',
            'PolynomialExpansion', 'RegexTokenizer', 'RFormula', 'RFormulaModel', 'SQLTransformer',
            'StandardScaler', 'StandardScalerModel', 'StopWordsRemover', 'StringIndexer',
            'StringIndexerModel', 'Tokenizer', 'VectorAssembler', 'VectorIndexer', 'VectorSlicer',
@@ -169,6 +170,141 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.splits)
+
+
+@inherit_doc
+class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    Extracts a vocabulary from document collections and generates a :py:attr:`CountVectorizerModel`.
+    >>> df = sqlContext.createDataFrame(
+    ...    [(0, ["a", "b", "c"]), (1, ["a", "b", "b", "c", "a"])],
+    ...    ["label", "raw"])
+    >>> cv = CountVectorizer(inputCol="raw", outputCol="vectors")
+    >>> model = cv.fit(df)
+    >>> model.transform(df).show(truncate=False)
+    +-----+---------------+-------------------------+
+    |label|raw            |vectors                  |
+    +-----+---------------+-------------------------+
+    |0    |[a, b, c]      |(3,[0,1,2],[1.0,1.0,1.0])|
+    |1    |[a, b, b, c, a]|(3,[0,1,2],[2.0,2.0,1.0])|
+    +-----+---------------+-------------------------+
+    ...
+    >>> sorted(map(str, model.vocabulary))
+    ['a', 'b', 'c']
+    """
+
+    # a placeholder to make it appear in the generated doc
+    minTF = Param(
+        Params._dummy(), "minTF", "Filter to ignore rare words in" +
+        " a document. For each document, terms with frequency/count less than the given" +
+        " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
+        " times the term must appear in the document); if this is a double in [0,1), then this " +
+        "specifies a fraction (out of the document's token count). Note that the parameter is " +
+        "only used in transform of CountVectorizerModel and does not affect fitting. Default 1.0")
+    minDF = Param(
+        Params._dummy(), "minDF", "Specifies the minimum number of" +
+        " different documents a term must appear in to be included in the vocabulary." +
+        " If this is an integer >= 1, this specifies the number of documents the term must" +
+        " appear in; if this is a double in [0,1), then this specifies the fraction of documents." +
+        " Default 1.0")
+    vocabSize = Param(
+        Params._dummy(), "vocabSize", "max size of the vocabulary. Default 1 << 18.")
+
+    @keyword_only
+    def __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None):
+        """
+        __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None)
+        """
+        super(CountVectorizer, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
+                                            self.uid)
+        self.minTF = Param(
+            self, "minTF", "Filter to ignore rare words in" +
+            " a document. For each document, terms with frequency/count less than the given" +
+            " threshold are ignored. If this is an integer >= 1, then this specifies a count (of" +
+            " times the term must appear in the document); if this is a double in [0,1), then " +
+            "this specifies a fraction (out of the document's token count). Note that the " +
+            "parameter is only used in transform of CountVectorizerModel and does not affect" +
+            "fitting. Default 1.0")
+        self.minDF = Param(
+            self, "minDF", "Specifies the minimum number of" +
+            " different documents a term must appear in to be included in the vocabulary." +
+            " If this is an integer >= 1, this specifies the number of documents the term must" +
+            " appear in; if this is a double in [0,1), then this specifies the fraction of " +
+            "documents. Default 1.0")
+        self.vocabSize = Param(
+            self, "vocabSize", "max size of the vocabulary. Default 1 << 18.")
+        self._setDefault(minTF=1.0, minDF=1.0, vocabSize=1 << 18)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None):
+        """
+        setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None)
+        Set the params for the CountVectorizer
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setMinTF(self, value):
+        """
+        Sets the value of :py:attr:`minTF`.
+        """
+        self._paramMap[self.minTF] = value
+        return self
+
+    def getMinTF(self):
+        """
+        Gets the value of minTF or its default value.
+        """
+        return self.getOrDefault(self.minTF)
+
+    def setMinDF(self, value):
+        """
+        Sets the value of :py:attr:`minDF`.
+        """
+        self._paramMap[self.minDF] = value
+        return self
+
+    def getMinDF(self):
+        """
+        Gets the value of minDF or its default value.
+        """
+        return self.getOrDefault(self.minDF)
+
+    def setVocabSize(self, value):
+        """
+        Sets the value of :py:attr:`vocabSize`.
+        """
+        self._paramMap[self.vocabSize] = value
+        return self
+
+    def getVocabSize(self):
+        """
+        Gets the value of vocabSize or its default value.
+        """
+        return self.getOrDefault(self.vocabSize)
+
+    def _create_model(self, java_model):
+        return CountVectorizerModel(java_model)
+
+
+class CountVectorizerModel(JavaModel):
+    """
+    .. note:: Experimental
+
+    Model fitted by CountVectorizer.
+    """
+
+    @property
+    def vocabulary(self):
+        """
+        An array of terms in the vocabulary.
+        """
+        return self._call_java("vocabulary")
 
 
 @inherit_doc
@@ -403,6 +539,100 @@ class IDFModel(JavaModel):
     .. note:: Experimental
 
     Model fitted by IDF.
+    """
+
+
+@inherit_doc
+class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    Rescale each feature individually to a common range [min, max] linearly using column summary
+    statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
+    feature E is calculated as,
+
+    Rescaled(e_i) = (e_i - E_min) / (E_max - E_min) * (max - min) + min
+
+    For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
+
+    Note that since zero values will probably be transformed to non-zero values, output of the
+    transformer will be DenseVector even for sparse input.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
+    >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
+    >>> model = mmScaler.fit(df)
+    >>> model.transform(df).show()
+    +-----+------+
+    |    a|scaled|
+    +-----+------+
+    |[0.0]| [0.0]|
+    |[2.0]| [1.0]|
+    +-----+------+
+    ...
+    """
+
+    # a placeholder to make it appear in the generated doc
+    min = Param(Params._dummy(), "min", "Lower bound of the output feature range")
+    max = Param(Params._dummy(), "max", "Upper bound of the output feature range")
+
+    @keyword_only
+    def __init__(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
+        """
+        __init__(self, min=0.0, max=1.0, inputCol=None, outputCol=None)
+        """
+        super(MinMaxScaler, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
+        self.min = Param(self, "min", "Lower bound of the output feature range")
+        self.max = Param(self, "max", "Upper bound of the output feature range")
+        self._setDefault(min=0.0, max=1.0)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
+        """
+        setParams(self, min=0.0, max=1.0, inputCol=None, outputCol=None)
+        Sets params for this MinMaxScaler.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setMin(self, value):
+        """
+        Sets the value of :py:attr:`min`.
+        """
+        self._paramMap[self.min] = value
+        return self
+
+    def getMin(self):
+        """
+        Gets the value of min or its default value.
+        """
+        return self.getOrDefault(self.min)
+
+    def setMax(self, value):
+        """
+        Sets the value of :py:attr:`max`.
+        """
+        self._paramMap[self.max] = value
+        return self
+
+    def getMax(self):
+        """
+        Gets the value of max or its default value.
+        """
+        return self.getOrDefault(self.max)
+
+    def _create_model(self, java_model):
+        return MinMaxScalerModel(java_model)
+
+
+class MinMaxScalerModel(JavaModel):
+    """
+    .. note:: Experimental
+
+    Model fitted by :py:class:`MinMaxScaler`.
     """
 
 
@@ -985,17 +1215,17 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     """
     .. note:: Experimental
 
-    A :py:class:`Transformer` that maps a column of string indices back to a new column of
-    corresponding string values using either the ML attributes of the input column, or if
-    provided using the labels supplied by the user.
-    All original columns are kept during transformation.
+    A :py:class:`Transformer` that maps a column of indices back to a new column of
+    corresponding string values.
+    The index-string mapping is either from the ML attributes of the input column,
+    or from user-supplied labels (which take precedence over ML attributes).
     See L{StringIndexer} for converting strings into indices.
     """
 
     # a placeholder to make the labels show up in generated doc
     labels = Param(Params._dummy(), "labels",
-                   "Optional array of labels to be provided by the user, if not supplied or " +
-                   "empty, column metadata is read for labels")
+                   "Optional array of labels specifying index-string mapping." +
+                   " If not provided or if empty, then metadata from inputCol is used instead.")
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, labels=None):
@@ -1006,8 +1236,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString",
                                             self.uid)
         self.labels = Param(self, "labels",
-                            "Optional array of labels to be provided by the user, if not " +
-                            "supplied or empty, column metadata is read for labels")
+                            "Optional array of labels specifying index-string mapping. If not" +
+                            " provided or if empty, then metadata from inputCol is used instead.")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1620,7 +1850,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol):
 
     Implements the transforms required for fitting a dataset against an
     R model formula. Currently we support a limited subset of the R
-    operators, including '~', '+', '-', and '.'. Also see the R formula
+    operators, including '~', '.', ':', '+', and '-'. Also see the R formula
     docs:
     http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
 
