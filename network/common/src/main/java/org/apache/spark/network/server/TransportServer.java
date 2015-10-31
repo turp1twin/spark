@@ -150,8 +150,10 @@ public class TransportServer implements Closeable {
       bootstrap.childGroup().shutdownGracefully();
     }
     bootstrap = null;
-    sslEncryptionHandler.close();
-    sslEncryptionHandler = null;
+    if (sslEncryptionHandler != null) {
+      sslEncryptionHandler.close();
+      sslEncryptionHandler = null;
+    }
   }
 
   /**

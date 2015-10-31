@@ -55,7 +55,7 @@ import org.eclipse.jetty.util.ssl.SslContextFactory
  * @param openSslEnabled enables or disables using an OpenSSL implementation
  * (if available on host system), requires certChain and keyFile arguments
  * @param protocol SSL protocol (remember that SSLv3 was compromised) supported by Java
- * @param enabledAlgorithms a set of encryption algorithms to use
+ * @param enabledAlgorithms a set of encryption algorithms that may be used
  */
 private[spark] case class SSLOptions(
     nameSpace: Option[String] = None,

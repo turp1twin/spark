@@ -100,7 +100,7 @@ public class SSLFactory {
    */
   private void initJdkSslContext(final Builder b)
     throws IOException, GeneralSecurityException {
-    this.keyManagers = keyManagers(b.keyStore, b.keyStorePassword, b.keyPassword);
+    this.keyManagers = keyManagers(b.keyStore, b.keyStorePassword);
     this.trustManagers = trustStoreManagers(
       b.trustStore, b.trustStorePassword,
       b.trustStoreReloadingEnabled, b.trustStoreReloadInterval);
@@ -444,7 +444,6 @@ public class SSLFactory {
   /**
    * @param keyStore
    * @param keyStorePassword
-   * @param keyPassword
    * @return
    * @throws NoSuchAlgorithmException
    * @throws CertificateException
@@ -452,15 +451,13 @@ public class SSLFactory {
    * @throws IOException
    * @throws UnrecoverableKeyException
    */
-  private static KeyManager[] keyManagers(
-    File keyStore, String keyStorePassword, String keyPassword)
+  private static KeyManager[] keyManagers(File keyStore, String keyStorePassword)
     throws NoSuchAlgorithmException, CertificateException,
     KeyStoreException, IOException, UnrecoverableKeyException {
-    if (keyPassword == null)
-      throw new KeyStoreException("keyPassword cannot be null");
-
     KeyManagerFactory factory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-    factory.init(loadKeyStore(keyStore, keyStorePassword), keyPassword.toCharArray());
+    factory.init(loadKeyStore(keyStore, keyStorePassword),
+      (keyStorePassword != null ? keyStorePassword.toCharArray() : null));
+
     return factory.getKeyManagers();
   }
 

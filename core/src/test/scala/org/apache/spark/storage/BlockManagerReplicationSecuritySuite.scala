@@ -1,8 +1,18 @@
 package org.apache.spark.storage
 
-/**
- * Created by jeffreyt on 10/29/15.
- */
-class BlockManagerReplicationSecuritySuite {
+import org.apache.spark.SSLSampleConfigs._
+import org.apache.spark.SparkConf
 
+/**
+ *
+ */
+class BlockManagerReplicationSecuritySuite extends BlockManagerReplicationSuite {
+
+  /**
+   * Create a [[SparkConf]] with the appropriate SSL settings...
+   * @return
+   */
+  override private[storage] def createConf(): SparkConf = {
+    sparkSSLConfig().set("spark.app.id", "test")
+  }
 }
